@@ -1,7 +1,7 @@
 LW Cargo Manager includes or is derived from the following MIT-licensed work.
 
 -------------------------------------------------------------------------------
-1. CometWorks SE2 client plugin template
+CometWorks SE2 client plugin template
    https://github.com/CometWorks/client2-plugin-template
    Used as the project base: build files, Plugin entry point, Settings UI, Tools.
 
@@ -27,13 +27,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
--------------------------------------------------------------------------------
-2. AutoSorter for Space Engineers 2 (version 0.2.4)
-   https://github.com/udedagame/SpaceEngineers2-AutoSorter
-   Adapted: the safe transfer routine (target slot selection, conservation
-   check, no TransferByDef) in ClientPlugin/Game/TransferService.cs, the
-   quick-deposit tool protection approach, and the SE2 API usage patterns
-   (Session.Update hook, host capture, world scan, reachability).
 
 MIT License
 
