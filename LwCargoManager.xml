@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<PluginData xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="GitHubPlugin">
+
+    <!-- The ID of your plugin, never change this -->
+    <Id>A629061B-601E-4566-B796-11E8ACED893F</Id>
+
+    <!-- GitHub repository ID -->
+    <RepoId>lwolf1965/LW-Cargo-Manager</RepoId>
+
+    <FriendlyName>LW Cargo Manager</FriendlyName>
+
+    <Author>LoneWolf2K</Author>
+
+    <Tooltip>Unload docks for mining ships, name-tag cargo sorting ([Ore], [Parts P1] ...) and storage tidying.</Tooltip>
+
+    <Description>Automatic cargo handling for Space Engineers 2.
+
+Unload docks: name a connector [Unload] and docked ships drop their ore (or [Unload All] for everything).
+Sorting: name containers [Ore], [Ice], [Parts], [Ammo], [Tools], [Consumables], [Cells], [Misc], [Player], with priority like [Ore P1]. Single items: [Si], [Iron Ore], [Rifle].
+LCD screens: [Cargo], [Cargo Ore], [Cargo Alerts] - fill bars, item lists, last delivery.
+Tidy: the same item is packed into as few containers as possible.
+
+Items only move through conveyors. Turrets, reactors, production inputs and unknown blocks are never touched.
+Single player and self-hosted worlds. Don't combine with other sorting plugins.
+
+Bugs and ideas: https://github.com/lwolf1965/LW-Cargo-Manager/issues
+    </Description>
+
+    <!-- Only source code in these folders is compiled by Pulsar. tests/ is excluded on purpose. -->
+    <SourceDirectories>
+        <Directory>ClientPlugin</Directory>
+    </SourceDirectories>
+
+    <!-- The current plugin version's commit hash: TODO fill in when publishing -->
+    <Commit>TODO Git commit hash</Commit>
+
+</PluginData>
