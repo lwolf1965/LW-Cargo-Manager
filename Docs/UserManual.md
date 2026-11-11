@@ -46,7 +46,7 @@ The plugin works on **your** grids (the ones you own) and only moves items **thr
 ## 2. Before you start
 
 1. **Install** the plugin (see the [README](../README.md#installation)). In the game log you should see
-   `[LwCargoManager] Loaded LwCargoManager 0.1.1.0`.
+   `[LwCargoManager] Loaded LwCargoManager 0.1.1.1`.
 2. **Try it on a copy of your world** first. It's an early version.
 3. **Set the LCD font once.** Pick any LCD, open its settings and choose the font **RobotoMono**. The plugin copies
    this font to every tagged LCD. Without a monospace font the columns on the screens don't line up.
