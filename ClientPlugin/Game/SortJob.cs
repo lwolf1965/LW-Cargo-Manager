@@ -26,16 +26,18 @@ internal static class SortJob
     }
 
     /// <summary>Items already reported as "no destination", so the log says it once per session.</summary>
-    private static readonly HashSet<(ItemDefinition, bool)> NoDestinationLogged = new HashSet<(ItemDefinition, bool)>();
+    private static readonly HashSet<(ItemDefinition, bool)> NoDestinationLogged = new();
 
     public static void Run(Session session, WorldScan scan, RunState state, Config config, RoutingOptions options, Budget budget)
     {
         var work = new List<Work>();
         foreach (var grid in scan.Grids.Values)
         {
-            if (!Routing.GridOptedIn(grid.Stores.Select(s => s.Info), options)) continue;
+            // Grids without tagged containers: only production outputs are emptied (into any cargo).
+            var optedIn = Routing.GridOptedIn(grid.Stores.Select(s => s.Info), options);
             foreach (var store in grid.Stores)
             {
+                if (!optedIn && store.Info.Role != BlockRole.Producer) continue;
                 var seen = new HashSet<ItemDefinition>();
                 var items = store.Inventory.Items;
                 for (var i = 0; i < items.Length; i++)
@@ -70,7 +72,9 @@ internal static class SortJob
             var candidates = grid.Stores.Where(s => !ReferenceEquals(s, source) && reachable.Contains(s.Inventory)).ToList();
             var byId = candidates.ToDictionary(s => s.Info.Id);
 
-            var destinations = Routing.Destinations(candidates.Select(s => s.Info), task.Key, options, forUnload: false, itemTagsOnly: task.ToItemTag);
+            // Production outputs may fall back to untagged cargo, so machines never stop on a full output.
+            var fromProducer = source.Info.Role == BlockRole.Producer;
+            var destinations = Routing.Destinations(candidates.Select(s => s.Info), task.Key, options, forUnload: fromProducer, itemTagsOnly: task.ToItemTag);
             if (destinations.Count == 0)
             {
                 if (NoDestinationLogged.Add((task.Item, task.ToItemTag)))

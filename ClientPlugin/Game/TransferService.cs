@@ -8,7 +8,7 @@ namespace ClientPlugin.Game;
 
 /// <summary>
 /// The ONLY code that moves items.
-/// Safety rules adapted from AutoSorter 0.2.4 (MIT, udedagame), see THIRD-PARTY-NOTICES.txt:
+/// Contains code adapted from MIT-licensed work, see THIRD-PARTY-NOTICES.txt. Safety rules:
 ///  - always TransferByIdx with an explicit target slot (never TransferByDef: it can duplicate
 ///    items with mixed battery metadata),
 ///  - check slot capacity before moving, non-stackable items move one at a time,

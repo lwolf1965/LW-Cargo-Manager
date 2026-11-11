@@ -34,12 +34,11 @@ public static class TagParserTests
 
     public static void PluralAndSingularWords()
     {
-        Assert.True(TagParser.Parse("[Component]").Accepts(Category.Parts));
-        Assert.True(TagParser.Parse("[COMPONENTS]").Accepts(Category.Parts));
+        Assert.True(TagParser.Parse("[PARTS]").Accepts(Category.Parts));
         Assert.True(TagParser.Parse("[Parts]").Accepts(Category.Parts));
         Assert.True(TagParser.Parse("[Part]").Accepts(Category.Parts));
-        Assert.True(TagParser.Parse("[Ingots]").Accepts(Category.Parts), "old name still works");
-        Assert.True(TagParser.Parse("[Materials]").Accepts(Category.Parts), "alias");
+        foreach (var old in new[] { "[Ingots]", "[Materials]", "[Components]" })
+            Assert.False(TagParser.Parse(old).Accepts(Category.Parts), old + " removed: only [Parts]");
         Assert.True(TagParser.Parse("[Tool]").Accepts(Category.Tools));
         Assert.True(TagParser.Parse("[Consumables]").Accepts(Category.Consumables));
         Assert.True(TagParser.Parse("[Ice]").Accepts(Category.Ice));
@@ -151,8 +150,8 @@ public static class DockRulesTests
     private static readonly BlockTags NoUnload = TagParser.Parse("[NoUnload]");
     private static readonly BlockTags None = BlockTags.Empty;
 
-    private static DockSide Station(BlockTags t) => new DockSide(t, true, 1_000_000);
-    private static DockSide Ship(BlockTags t, double tonnes) => new DockSide(t, false, tonnes * 1000);
+    private static DockSide Station(BlockTags t) => new(t, true, 1_000_000);
+    private static DockSide Ship(BlockTags t, double tonnes) => new(t, false, tonnes * 1000);
 
     public static void StationTaggedShipUntagged() =>
         Assert.Equal(DockReceiver.A, DockRules.Receiver(Station(Unload), Ship(None, 60), UnloadMode.Tagged));
@@ -199,12 +198,12 @@ public static class DockRulesTests
 
 public static class RoutingTests
 {
-    private static readonly RoutingOptions Defaults = new RoutingOptions();
+    private static readonly RoutingOptions Defaults = new();
     private static int nextId;
 
     private static StoreInfo Store(string name, double max = 1000, double current = 0, BlockRole role = BlockRole.Storage,
         bool output = true, Category content = Category.None, int grid = 1) =>
-        new StoreInfo
+        new()
         {
             Id = ++nextId, GridId = grid, Role = role, IsOutput = output, Tags = TagParser.Parse(name),
             MaxMass = max, CurrentMass = current, IsEmpty = current == 0, ContentCategory = content,
@@ -453,13 +452,13 @@ public static class ItemPathTests
 
 public static class ItemTagTests
 {
-    private static readonly RoutingOptions Defaults = new RoutingOptions();
-    private static readonly ItemKey Silicon = new ItemKey(Category.Ore, "Silicon Ore");
-    private static readonly ItemKey Nickel = new ItemKey(Category.Ore, "Nickel Ore");
-    private static readonly ItemKey SiliconParts = new ItemKey(Category.Parts, "Silicon Wafer");
-    private static readonly ItemKey Iron = new ItemKey(Category.Ore, "Iron Ore");
+    private static readonly RoutingOptions Defaults = new();
+    private static readonly ItemKey Silicon = new(Category.Ore, "Silicon Ore");
+    private static readonly ItemKey Nickel = new(Category.Ore, "Nickel Ore");
+    private static readonly ItemKey SiliconParts = new(Category.Parts, "Silicon Wafer");
+    private static readonly ItemKey Iron = new(Category.Ore, "Iron Ore");
 
-    private static StoreInfo Store(string name, int id, double max = 1000, double used = 0) => new StoreInfo
+    private static StoreInfo Store(string name, int id, double max = 1000, double used = 0) => new()
     {
         Id = id, Role = BlockRole.Storage, Tags = TagParser.Parse(name), MaxMass = max, CurrentMass = used, IsEmpty = used == 0,
     };
@@ -521,5 +520,133 @@ public static class ItemTagTests
         Assert.Equal("Si", rows[1].Label);
         Assert.Equal("Untagged", rows[2].Label);
         Assert.Equal(1, rows[2].Containers);
+    }
+}
+
+public static class PlayerTagTests
+{
+    public static void PlayerGroup()
+    {
+        var t = TagParser.Parse("Locker [Player P2] [Rifle]");
+        Assert.True(t.Accepts(Category.Tools));
+        Assert.True(t.Accepts(Category.Consumables));
+        Assert.False(t.Accepts(Category.Ammo), "ammo is separate");
+        Assert.Equal(2, t.PriorityFor(Category.Consumables));
+        Assert.Equal(1, t.Items.Count, "[Rifle] item tag for the magazines");
+        Assert.Equal(0, TagParser.Parse("[Player]").Items.Count, "not an item tag");
+
+        var box = new StoreInfo { Id = 1, Role = BlockRole.Storage, Tags = TagParser.Parse("[Player]"), MaxMass = 100 };
+        var tools = new StoreInfo { Id = 2, Role = BlockRole.Storage, Tags = TagParser.Parse("[Tools]"), MaxMass = 100 };
+        var rows = CargoSummary.Build(new[] { box, tools });
+        Assert.Equal("Tools", rows[0].Label);
+        Assert.Equal(1, rows[0].Containers, "Player locker not counted under Tools");
+        Assert.Equal("Player", rows[1].Label);
+        Assert.Equal("Total", rows[2].Label);
+    }
+}
+
+public static class ToolNameTests
+{
+    public static void HandToolNames()
+    {
+        Assert.Equal("Rifle", ItemPaths.NameFromPath(@"x : Vanilla\CharacterTools\Rifle\Items\Rifle_ItemDefinition.def"));
+        Assert.Equal("Pistol", ItemPaths.NameFromPath(@"x : Vanilla\CharacterTools\Pistol\Item\Pistol_ItemDefinition.def"));
+        Assert.Equal("Rocket Launcher", ItemPaths.NameFromPath(@"x : Vanilla\CharacterTools\RocketLauncher\Item\RocketLauncherItemDefinition.def"));
+        Assert.Equal("Drill Mk3", ItemPaths.NameFromPath(@"x : Vanilla\CharacterTools\HandDrills\DrillMk3\Items\ItemDrillMk3.def"));
+        Assert.Equal("Area Welder Mk1", ItemPaths.NameFromPath(@"x : Vanilla\CharacterTools\HandWelders\AreaWelderMk1\Items\ItemAreaWelderMk1.def"));
+        Assert.Equal("Rifle Magazine", ItemPaths.NameFromPath(@"x : Vanilla\Items\Ammo\RifleMagazine\RifleMagazineItem.def"));
+    }
+}
+
+public static class ProducerRoleTests
+{
+    public static void AllProductionBlocksAreProducers()
+    {
+        var roles = new BlockRoles();
+        foreach (var kind in new[] { BlockRoles.RefineryKind, BlockRoles.SmelterKind, BlockRoles.AssemblerKind,
+                     BlockRoles.GearforgeKind, BlockRoles.FabricatorKind, BlockRoles.DrillKind, BlockRoles.MiningLaserKind })
+            Assert.Equal(BlockRole.Producer, roles.RoleOf(kind), kind.ToString());
+    }
+
+    public static void ProducerOutputFallsBackToUntaggedCargo()
+    {
+        var plain = new StoreInfo { Id = 1, Role = BlockRole.Storage, Tags = BlockTags.Empty, MaxMass = 100 };
+        var d = Routing.Destinations(new[] { plain }, Category.Parts, new RoutingOptions(), forUnload: true);
+        Assert.Equal(1, d.Count, "untagged cargo takes producer output");
+        Assert.Equal(0, Routing.Destinations(new[] { plain }, Category.Parts, new RoutingOptions(), forUnload: false).Count, "normal sort doesn't");
+    }
+}
+
+public static class AutoRoleTests
+{
+    private static BlockRole Of(params string[] c) => BlockRoles.AutoRole(new HashSet<string>(c));
+
+    public static void ModdedBlocks()
+    {
+        Assert.Equal(BlockRole.Storage, Of("InventoryBlockDestructionExplosionComponent", "FunctionalBlockComponent", "ConveyorComponent", "InventoryComponent"), "modded cargo");
+        Assert.Equal(BlockRole.Producer, Of("PowerableBlockComponent", "ItemConverterComponent", "InventoryComponent"), "modded assembler");
+        Assert.Equal(BlockRole.Producer, Of("PowerableBlockComponent", "DrillComponent", "InventoryComponent"), "modded drill");
+        Assert.Equal(BlockRole.Consumer, Of("PowerableBlockComponent", "ProjectileWeaponComponent", "InventoryComponent"), "turret");
+        Assert.Equal(BlockRole.Consumer, Of("PowerableBlockComponent", "ResourceContainerInventoryComponent", "InventoryComponent"), "battery");
+        Assert.Equal(BlockRole.Consumer, Of("FunctionalBlockComponent", "ConveyorComponent", "InventoryComponent"), "trash bin (no explosion component)");
+        Assert.Equal(BlockRole.Consumer, Of("PowerableBlockComponent", "ItemToResourceConverterComponent", "InventoryComponent"), "reactor");
+        Assert.Equal(BlockRole.Consumer, Of("SolarGeneratorComponent"), "no inventory");
+        Assert.False(new BlockRoles().IsKnown(Guid.NewGuid()));
+        Assert.True(new BlockRoles().IsKnown(BlockRoles.CargoContainerKind));
+    }
+}
+
+public static class AmmoPlannerTests
+{
+    public static void Planning()
+    {
+        Assert.Equal(360.0, AmmoPlanner.Target(120, 2), "turrets refilled once + 2x reserve");
+        Assert.Equal(0, AmmoPlanner.Batches(400, 360, 10, 50, 10), "enough");
+        Assert.Equal(10, AmmoPlanner.Batches(0, 360, 10, 50, 10), "capped by batch limit");
+        Assert.Equal(3, AmmoPlanner.Batches(0, 360, 10, 3, 10), "capped by materials");
+        Assert.Equal(1, AmmoPlanner.Batches(355, 360, 10, 50, 10), "rounds up");
+        Assert.Equal(0, AmmoPlanner.Batches(0, 360, 10, 0, 10), "no materials");
+
+        // 600 rounds/min, 1 round per shot, 200 rounds per item → 3 items/min per weapon
+        Assert.Equal(3.0, AmmoPlanner.ItemsPerMinute(600, 1, 200));
+        Assert.Equal(0.0, AmmoPlanner.ItemsPerMinute(600, 1, 0), "unknown");
+        // 31 weapons × 1 item reload + 31 × 3/min × 5 min
+        Assert.Equal(31 + 465.0, AmmoPlanner.Target(31, 93, 5, 2));
+        Assert.Equal(93.0, AmmoPlanner.Target(31, 0, 5, 2), "rate unknown: 2x reserve");
+    }
+
+    public static void Tags()
+    {
+        Assert.True(TagParser.Parse("Gearforge 2.5 m [Make Ammo]").MakeAmmo);
+        Assert.Equal(0, TagParser.Parse("Gearforge [Make Ammo]").Items.Count, "not an item tag");
+        Assert.Equal(LcdViewKind.Turrets, TagParser.Parse("LCD [Turrets 54]").ScreenViews[0].Kind);
+        Assert.Equal(54, TagParser.Parse("LCD [Turrets 54]").ScreenViews[0].Width);
+    }
+
+    public static void Screen()
+    {
+        var text = AmmoPlanner.Screen("Base", new List<AmmoStatus>
+        {
+            new() { Name = "Gatling Ammo", Turrets = 31, Capacity = 1550, Stock = 2233, Target = 4650, Production = "making 10 (Gearforge 2.5 m)" },
+            new() { Name = "Missile", Turrets = 4, Capacity = 120, Stock = 453, Target = 360 },
+        }, "", 40);
+        Assert.True(text.Contains("Gatling Ammo  31 weapons"), text);
+        Assert.True(text.Contains("2 233 / 4 650 LOW"), text);
+        Assert.True(text.Contains("making 10"), text);
+        Assert.True(text.Contains("453 / 360 OK"), text);
+    }
+
+    public static void ConveyorCheckFindsUnlinked()
+    {
+        var nodes = new List<(int, string)> { (1, "Cargo A"), (2, "Cargo B"), (3, "Cargo C"), (4, "Lost Box") };
+        // 1 → 2, 3 → 2 (one-way links still join), 4 alone
+        var reach = new Dictionary<int, ICollection<int>> { [1] = new[] { 1, 2 }, [2] = new[] { 2 }, [3] = new[] { 2, 99 }, [4] = new[] { 4 } };
+        var lost = ConveyorCheck.Unlinked(nodes, id => reach[id]);
+        Assert.Equal(1, lost.Count);
+        Assert.Equal("Lost Box", lost[0]);
+
+        var all = new Dictionary<int, ICollection<int>> { [1] = new[] { 2, 3, 4 }, [2] = new int[0], [3] = new int[0], [4] = new int[0] };
+        Assert.Equal(0, ConveyorCheck.Unlinked(nodes, id => all[id]).Count, "all linked");
+        Assert.Equal(0, ConveyorCheck.Unlinked(new List<(int, string)> { (1, "One") }, id => new int[0]).Count, "single block");
     }
 }

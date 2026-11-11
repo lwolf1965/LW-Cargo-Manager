@@ -31,6 +31,9 @@ Bugs and ideas: https://github.com/lwolf1965/LW-Cargo-Manager/issues
         <Directory>ClientPlugin</Directory>
     </SourceDirectories>
 
+    <!-- Shown in the Pulsar plugin list -->
+    <Hidden>false</Hidden>
+
     <!-- The current plugin version's commit hash: TODO fill in when publishing -->
     <Commit>TODO Git commit hash</Commit>
 

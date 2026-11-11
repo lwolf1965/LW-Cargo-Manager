@@ -31,7 +31,7 @@ internal static class ConnectorAdapter
         public bool Usable => Locked != null && Partner != null;
     }
 
-    private static readonly Dictionary<Type, Probe> Probes = new Dictionary<Type, Probe>();
+    private static readonly Dictionary<Type, Probe> Probes = new();
 
     /// <summary>True once any connector type was probed successfully.</summary>
     public static bool Supported { get; private set; }
@@ -99,7 +99,7 @@ internal static class ConnectorAdapter
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
         foreach (var name in names)
         {
-            var property = type.GetProperty(name, flags);
+            var property = Reflect.Property(type, name);
             if (property != null && property.GetIndexParameters().Length == 0 && typeOk(property.PropertyType)) return property;
             var field = type.GetField(name, flags) ?? type.GetField("_" + char.ToLowerInvariant(name[0]) + name.Substring(1), flags);
             if (field != null && typeOk(field.FieldType)) return field;
@@ -147,7 +147,7 @@ internal static class GridMass
             {
                 probed = true;
                 const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-                massMember = (MemberInfo)physics.GetType().GetProperty("Mass", flags) ?? physics.GetType().GetField("Mass", flags);
+                massMember = Reflect.Member(physics.GetType(), "Mass");
                 PluginLog.Info($"Grid mass probe: {(massMember == null ? "not found, using block count" : massMember.Name)}");
             }
 

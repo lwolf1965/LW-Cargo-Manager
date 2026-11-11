@@ -40,10 +40,22 @@ public static class ItemPaths
         if (parts.Length < 2) return null;
 
         var folder = parts[parts.Length - 2];
+        // Hand tools: "...\CharacterTools\Rifle\Items\Rifle_ItemDefinition.def" - the useful name is one folder up.
+        if ((folder.Equals("Item", StringComparison.OrdinalIgnoreCase) || folder.Equals("Items", StringComparison.OrdinalIgnoreCase))
+            && parts.Length >= 3)
+            folder = parts[parts.Length - 3];
         if (folder.EndsWith("Item", StringComparison.Ordinal) && folder.Length > 4)
             folder = folder.Substring(0, folder.Length - 4);
         var name = SplitCamel(folder).Trim();
+        if (name.Equals("Ice Ore", StringComparison.OrdinalIgnoreCase)) name = "Ice"; // ice is ice, not an ore
         return name.Length == 0 ? null : name;
+    }
+
+    /// <summary>On the ore screen every line is an ore, so "Titanium Ore" → "Titanium".</summary>
+    public static string ShortOreName(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return name;
+        return name.EndsWith(" Ore", StringComparison.OrdinalIgnoreCase) && name.Length > 4 ? name.Substring(0, name.Length - 4) : name;
     }
 
     public static string SplitCamel(string s)

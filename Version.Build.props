@@ -1,8 +1,10 @@
 <Project>
   <PropertyGroup>
-    <!-- Plugin version, change it here at a single place -->
-    <Version>0.3.0</Version>
-    <AssemblyVersion>$(Version)</AssemblyVersion>
-    <FileVersion>$(Version)</FileVersion>
+    <!-- Package / display version. The assembly version comes from ClientPlugin.Plugin.Version (AssemblyInfo.cs),
+         because Pulsar compiles from source and never reads this file. Keep both the same. -->
+    <Version>0.1.0.1</Version>
+    <GenerateAssemblyVersionAttribute>false</GenerateAssemblyVersionAttribute>
+    <GenerateAssemblyFileVersionAttribute>false</GenerateAssemblyFileVersionAttribute>
+    <GenerateAssemblyInformationalVersionAttribute>false</GenerateAssemblyInformationalVersionAttribute>
   </PropertyGroup>
 </Project>

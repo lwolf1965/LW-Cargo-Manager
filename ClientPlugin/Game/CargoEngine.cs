@@ -35,13 +35,15 @@ internal sealed class RunState
 {
     public long NextUnload, NextSort, NextTidy, NextLcd, NextReport;
     /// <summary>Dock lines for [Cargo] screens, per receiving grid. Rebuilt by every unload pass.</summary>
-    public readonly Dictionary<object, List<string>> DockStatus = new Dictionary<object, List<string>>();
+    public readonly Dictionary<object, List<string>> DockStatus = new();
     public int SortCursor;
     /// <summary>Dock direction decided at lock time, kept until unlock (mass changes while unloading).</summary>
-    public readonly Dictionary<(Entity, Entity), DockReceiver> DockDirections = new Dictionary<(Entity, Entity), DockReceiver>();
-    public readonly HashSet<(Entity, Entity)> TieNotified = new HashSet<(Entity, Entity)>();
+    public readonly Dictionary<(Entity, Entity), DockReceiver> DockDirections = new();
+    /// <summary>Both connector names when the direction was decided: a rename while docked decides again.</summary>
+    public readonly Dictionary<(Entity, Entity), string> DockNames = new();
+    public readonly HashSet<(Entity, Entity)> TieNotified = new();
     /// <summary>"Storage full" was already shown for this receiver/giver grid pair.</summary>
-    public readonly HashSet<(object, object)> FullNotified = new HashSet<(object, object)>();
+    public readonly HashSet<(object, object)> FullNotified = new();
 }
 
 /// <summary>
@@ -51,17 +53,17 @@ internal sealed class RunState
 /// </summary>
 internal static class CargoEngine
 {
-    private static readonly ConditionalWeakTable<Session, RunState> States = new ConditionalWeakTable<Session, RunState>();
+    private static readonly ConditionalWeakTable<Session, RunState> States = new();
     private static readonly Stopwatch Clock = Stopwatch.StartNew();
 
     public static readonly GraceTracker<InventoryComponent, ItemDefinition> Grace =
-        new GraceTracker<InventoryComponent, ItemDefinition>(() => Clock.Elapsed.TotalSeconds);
+        new(() => Clock.Elapsed.TotalSeconds);
 
     /// <summary>Last delivery per receiving grid, for [Cargo Ore] style screens.</summary>
-    public static readonly DeliveryTracker<object, ItemDefinition> Deliveries = new DeliveryTracker<object, ItemDefinition>();
+    public static readonly DeliveryTracker<object, ItemDefinition> Deliveries = new();
 
     /// <summary>Recent messages for [Cargo Alerts] screens.</summary>
-    public static readonly AlertLog Alerts = new AlertLog();
+    public static readonly AlertLog Alerts = new();
 
     public static double NowSeconds => Clock.Elapsed.TotalSeconds;
 
@@ -163,6 +165,7 @@ internal static class CargoEngine
             {
                 state.NextTidy = now + Ticks(config.TidyIntervalSeconds);
                 TidyJob.Run(session, scan, state, config, options, budget);
+                AmmoJob.Run(scan, config, NowSeconds); // turret ammo stock; same slow rhythm as tidy
             }
 
             // LCDs last, so they show the result of this pass. Not limited by the transfer budget.
@@ -170,7 +173,16 @@ internal static class CargoEngine
             {
                 state.NextLcd = now + Ticks(config.LcdIntervalSeconds);
                 scan.RefreshAll();
-                LcdJob.Run(scan, state, config, NowSeconds);
+                try
+                {
+                    LcdJob.Run(scan, state, config, NowSeconds);
+                }
+                catch (Exception e)
+                {
+                    // Screens only read; a screen bug must not stop unloading and sorting. Logged, not stopped.
+                    if (LcdErrors.Add(e.GetType().Name + e.TargetSite?.Name))
+                        PluginLog.Warn("LCD update failed, plugin keeps running: " + e);
+                }
             }
 
             if (now >= state.NextReport)
@@ -189,6 +201,8 @@ internal static class CargoEngine
             PluginLog.Error(e.ToString());
         }
     }
+
+    private static readonly HashSet<string> LcdErrors = new();
 
     private static long Ticks(double seconds) => (long)(seconds * Stopwatch.Frequency);
 

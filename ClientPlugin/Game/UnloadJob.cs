@@ -148,14 +148,24 @@ internal static class UnloadJob
 
             // Stored direction is relative to the key order: A = key.Item1.
             var thisIsFirst = ReferenceEquals(key.Item1, entity);
-            if (!state.DockDirections.TryGetValue(key, out var stored))
+            var names = thisIsFirst ? block.Name + "\n" + partner.Block.Name : partner.Block.Name + "\n" + block.Name;
+            if (!state.DockDirections.TryGetValue(key, out var stored)
+                || !state.DockNames.TryGetValue(key, out var decidedFor) || decidedFor != names)
             {
                 var mine = new DockSide(block.Tags, grid.IsStatic, GridMass.Of(grid));
                 var theirs = new DockSide(partner.Block.Tags, partner.Grid.IsStatic, GridMass.Of(partner.Grid));
                 var relativeToThis = DockRules.Receiver(mine, theirs, config.UnloadMode);
                 stored = thisIsFirst ? relativeToThis : Flip(relativeToThis);
-                state.DockDirections[key] = stored; // decided once per lock
-                PluginLog.Verbose($"Dock '{block.Name}' <-> '{partner.Block.Name}': receiver={relativeToThis} (A = '{block.Name}')");
+                state.DockDirections[key] = stored; // decided once per lock and again after a rename
+                state.DockNames[key] = names;
+                PluginLog.Info($"Dock '{block.Name}' ({BlockCount(grid)} blocks) <-> '{partner.Block.Name}' ({BlockCount(partner.Grid)} blocks): " +
+                               (relativeToThis switch
+                               {
+                                   DockReceiver.A => $"'{block.Name}' side receives",
+                                   DockReceiver.B => $"'{partner.Block.Name}' side receives",
+                                   DockReceiver.Tie => "both are unload docks of the same size, skipped",
+                                   _ => "no unload (no [Unload] tag on a receiving side, [NoUnload], or a station would feed a ship)",
+                               }));
             }
             var receiver = thisIsFirst ? stored : Flip(stored);
 
@@ -171,6 +181,7 @@ internal static class UnloadJob
         foreach (var key in state.DockDirections.Keys.Where(k => !seenPairs.Contains(k)).ToList())
         {
             state.DockDirections.Remove(key);
+            state.DockNames.Remove(key);
             state.TieNotified.Remove(key);
         }
         return result;
@@ -181,6 +192,8 @@ internal static class UnloadJob
 
     private static (Entity, Entity) KeyOf(Entity a, Entity b) =>
         a.GetHashCode() <= b.GetHashCode() ? (a, b) : (b, a);
+
+    private static int BlockCount(GridInfo grid) => grid.Blocks.Count;
 
     private static DockReceiver Flip(DockReceiver r) => r switch
     {

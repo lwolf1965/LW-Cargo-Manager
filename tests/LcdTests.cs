@@ -11,7 +11,7 @@ public static class LcdTagTests
     {
         Assert.Equal(new LcdView(LcdViewKind.Summary, Category.None), TagParser.Parse("LCD 1 [Cargo]").LcdViews[0]);
         Assert.Equal(new LcdView(LcdViewKind.Category, Category.Ore), TagParser.Parse("LCD [cargo ore]").LcdViews[0]);
-        Assert.Equal(new LcdView(LcdViewKind.Category, Category.Parts), TagParser.Parse("LCD [Cargo Components]").LcdViews[0], "alias");
+        Assert.Equal(new LcdView(LcdViewKind.Category, Category.Parts), TagParser.Parse("LCD [Cargo Parts]").LcdViews[0]);
         Assert.Equal(new LcdView(LcdViewKind.Alerts, Category.None), TagParser.Parse("LCD [Cargo Alerts]").LcdViews[0]);
     }
 
@@ -41,7 +41,8 @@ public static class CargoSummaryTests
     private static int id;
 
     private static StoreInfo Box(string name, double max, double used, bool slotsFull = false, BlockRole role = BlockRole.Storage) =>
-        new StoreInfo { Id = ++id, Role = role, Tags = TagParser.Parse(name), MaxMass = max, CurrentMass = used, IsEmpty = used == 0, SlotsFull = slotsFull };
+        new()
+        { Id = ++id, Role = role, Tags = TagParser.Parse(name), MaxMass = max, CurrentMass = used, IsEmpty = used == 0, SlotsFull = slotsFull };
 
     public static void CapacityIsSumOfTaggedContainers()
     {
@@ -131,16 +132,16 @@ public static class LcdFormatterTests
     {
         var rows = new List<CategorySummary>
         {
-            new CategorySummary { Label = "Ore", Category = Category.Ore, Used = 30000, Max = 50000, Containers = 3 },
-            new CategorySummary { Label = "Components", Category = Category.Parts, Used = 12000, Max = 20000, Containers = 1, Full = true },
-            new CategorySummary { Label = "Total", Used = 42000, Max = 70000, Containers = 4 },
+            new() { Label = "Ore", Category = Category.Ore, Used = 30000, Max = 50000, Containers = 3 },
+            new() { Label = "Parts", Category = Category.Parts, Used = 12000, Max = 20000, Containers = 1, Full = true },
+            new() { Label = "Total", Used = 42000, Max = 70000, Containers = 4 },
         };
         var text = LcdFormatter.Summary("Mining Base", rows, new[] { "Dock A: unloading" }, "12:41", 60);
         var lines = text.Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
         Assert.Equal(5, lines.Length);
         Assert.True(lines[0].StartsWith("LW CARGO - Mining Base"));
         Assert.Equal("Ore        ######....  60%  30.0 t / 50.0 t (3)", lines[1]);
-        Assert.Equal("Components ######.... FULL  12.0 t / 20.0 t (1)", lines[2]);
+        Assert.Equal("Parts      ######.... FULL  12.0 t / 20.0 t (1)", lines[2]);
         Assert.Equal("Total 42.0 t / 70.0 t (60%)", lines[3]);
         Assert.Equal("Dock A: unloading", lines[4]);
     }
@@ -150,20 +151,23 @@ public static class LcdFormatterTests
         var cap = new CategorySummary { Label = "Ore", Category = Category.Ore, Used = 41000, Max = 50000, Containers = 3 };
         var items = new List<ItemLine>
         {
-            new ItemLine("Stone", 3000, true, null),
-            new ItemLine("Iron", 24300, true, 1200),
-            new ItemLine("Nickel", 8100, true, null),
-            new ItemLine("Gold", 0, true, null),
-            new ItemLine("Silicon", 5600, true, -500),
+            new("Stone", 3000, true, null),
+            new("Iron", 24300, true, 1200),
+            new("Nickel", 8100, true, null),
+            new("Gold", 0, true, null),
+            new("Silicon", 5600, true, -500),
         };
         var text = LcdFormatter.CategoryDetail("Mining Base", cap, items, "", 60, maxLines: 3);
         var lines = text.Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
-        Assert.Equal("ORE - Mining Base", lines[0]);
+        Assert.Equal("ORE 1/2 - Mining Base", lines[0]);
         Assert.True(lines[1].Contains("82%"), lines[1]);
-        Assert.Equal("Iron              24.3 t  +1.2 t/min", lines[2]);
-        Assert.Equal("Nickel             8.1 t", lines[3]);
-        Assert.Equal("Silicon            5.6 t  -500 kg/min", lines[4]);
-        Assert.Equal("... +1 more", lines[5], "Stone hidden, Gold (0) skipped");
+        Assert.True(lines[2].StartsWith("Iron ") && lines[2].EndsWith("24.3 t  +1.2 t/min"), lines[2]);
+        Assert.True(lines[3].StartsWith("Nickel ") && lines[3].EndsWith("8.1 t"), lines[3]);
+        Assert.True(lines[4].EndsWith("5.6 t  -500 kg/min"), lines[4]);
+        Assert.Equal("... +1 more (page 2)", lines[5], "Stone hidden, Gold (0) skipped");
+        var page2 = LcdFormatter.CategoryDetail("Mining Base", cap, items, "", 60, 3, page: 2).Split('\n');
+        Assert.Equal("ORE 2/2 - Mining Base", page2[0].TrimEnd('\r'));
+        Assert.True(page2[2].StartsWith("Stone"), page2[2]);
     }
 
     public static void CategoryScreenWithoutContainers()
@@ -178,15 +182,15 @@ public static class LcdFormatterTests
     {
         var cap = new CategorySummary { Label = "Parts", Category = Category.Parts, Used = 1, Max = 10, Containers = 1 };
         var text = LcdFormatter.CategoryDetail("Base", cap, new[] { new ItemLine("Steel Plate", 1250, false, null) }, "", 40, 10);
-        Assert.True(text.Contains("Steel Plate        1 250"), text);
+        Assert.True(text.Contains("Steel Plate") && text.Contains("1 250"), text);
     }
 
     public static void AlertsScreen()
     {
         var rows = new List<CategorySummary>
         {
-            new CategorySummary { Label = "Ore", Full = true, Containers = 2, Max = 1 },
-            new CategorySummary { Label = "Total", Full = true, Containers = 2, Max = 1 },
+            new() { Label = "Ore", Full = true, Containers = 2, Max = 1 },
+            new() { Label = "Total", Full = true, Containers = 2, Max = 1 },
         };
         var text = LcdFormatter.Alerts("Base", rows, new[] { "Plugin stopped: test" }, new[] { "now     Unloaded Ore 1200" }, "", 40);
         Assert.True(text.Contains("! Plugin stopped: test"));
@@ -327,14 +331,15 @@ public static class DeliveryTests
         var cap = new CategorySummary { Label = "Ore", Category = Category.Ore, Used = 41000, Max = 50000, Containers = 3 };
         var items = new List<ItemLine>
         {
-            new ItemLine("Iron", 24300, true, null, 3100),
-            new ItemLine("Silicon", 5600, true, null, null),
+            new("Iron", 24300, true, null, 3100),
+            new("Silicon", 5600, true, null, null),
         };
         var footer = LcdFormatter.DeliveryLine(5200, true, 240, "Dock A");
         var text = LcdFormatter.CategoryDetail("Mining Base", cap, items, "", 40, 10, footer);
         var lines = text.Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
-        Assert.Equal("Iron              24.3 t  +3.1 t", lines[2]);
-        Assert.Equal("Silicon            5.6 t", lines[3]);
+        Assert.True(lines[2].StartsWith("Iron ") && lines[2].EndsWith("24.3 t  +3.1 t"), lines[2]);
+        Assert.True(lines[3].StartsWith("Silicon ") && lines[3].EndsWith("5.6 t"), lines[3]);
+        Assert.True(lines.All(l => l.Length <= 40));
         Assert.Equal("Last delivery: 5.2 t, 4m ago (Dock A)", lines[4]);
     }
 }
@@ -358,8 +363,8 @@ public static class CompactLcdTests
     {
         var rows = new List<CategorySummary>
         {
-            new CategorySummary { Label = "Ore", Category = Category.Ore, Used = 1900, Max = 10_800_000, Containers = 1 },
-            new CategorySummary { Label = "Total", Used = 10300, Max = 344_800_000, Containers = 36 },
+            new() { Label = "Ore", Category = Category.Ore, Used = 1900, Max = 10_800_000, Containers = 1 },
+            new() { Label = "Total", Used = 10300, Max = 344_800_000, Containers = 36 },
         };
         var lines = LcdFormatter.Summary("LCD", rows, null, "15:17", 36).Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
         Assert.Equal("Ore       ..........   0% 1.9 t (1)", lines[1]);
@@ -370,10 +375,10 @@ public static class CompactLcdTests
     {
         var rows = new List<CategorySummary>
         {
-            new CategorySummary { Label = "Ore", Category = Category.Ore, Used = 10_260, Max = 10_750_000, Containers = 1 },
-            new CategorySummary { Label = "Consumables", Category = Category.Consumables, Used = 999_000_000, Max = 999_000_000, Containers = 12 },
-            new CategorySummary { Label = "Untagged", Used = 0, Max = 334_000_000, Containers = 35 },
-            new CategorySummary { Label = "Total", Used = 10_300, Max = 344_800_000, Containers = 36 },
+            new() { Label = "Ore", Category = Category.Ore, Used = 10_260, Max = 10_750_000, Containers = 1 },
+            new() { Label = "Consumables", Category = Category.Consumables, Used = 999_000_000, Max = 999_000_000, Containers = 12 },
+            new() { Label = "Untagged", Used = 0, Max = 334_000_000, Containers = 35 },
+            new() { Label = "Total", Used = 10_300, Max = 344_800_000, Containers = 36 },
         };
         foreach (var width in new[] { 20, 24, 30, 31, 36 })
         {
@@ -393,3 +398,285 @@ public static class CompactLcdTests
         Assert.Equal(0, TagParser.Parse("[Cargo Ore 54]").Items.Count, "not an item tag");
     }
 }
+
+public static class StatusTests
+{
+    public static void StatusTags()
+    {
+        Assert.Equal(new LcdView(LcdViewKind.Power, Category.None, 0), TagParser.Parse("LCD [Power]").LcdViews[0]);
+        Assert.Equal(new LcdView(LcdViewKind.Power, Category.None, 0), TagParser.Parse("LCD [Status Power]").LcdViews[0]);
+        Assert.Equal(new LcdView(LcdViewKind.PowerSources, Category.None, 54), TagParser.Parse("[Power Sources 54]").LcdViews[0]);
+        Assert.Equal(new LcdView(LcdViewKind.PowerUsers, Category.None, 0), TagParser.Parse("[power users]").LcdViews[0]);
+        Assert.Equal(new LcdView(LcdViewKind.Damage, Category.None, 40), TagParser.Parse("[Damage 40]").LcdViews[0]);
+        Assert.Equal(1, TagParser.Parse("Box [Power Module]").Items.Count, "item tag, not a screen");
+        Assert.Equal(0, TagParser.Parse("Box [Power Module]").LcdViews.Count);
+    }
+
+    private static PowerSnapshot Sample()
+    {
+        var p = new PowerSnapshot();
+        p.Sources.Add(new PowerSource("Reactor 2.5 m", PowerSourceKind.Reactor, true));
+        p.Sources.Add(new PowerSource("Solar Panel 5 m", PowerSourceKind.Solar, true));
+        p.Sources.Add(new PowerSource("Solar Panel 5 m", PowerSourceKind.Solar, false));
+        p.Sources.Add(new PowerSource("Battery 2.5 m", PowerSourceKind.Battery, true, 3, 4, 0.5));
+        p.Sources.Add(new PowerSource("Battery 2.5 m", PowerSourceKind.Battery, true, 1, 4, 0.5));
+        p.Users.Add(new PowerUser("Refinery 7.5 m", 1.8, true));
+        p.Users.Add(new PowerUser("Assembler 5 m", 0.3, true));
+        p.Users.Add(new PowerUser("Assembler 5 m", 0.3, true));
+        return p;
+    }
+
+    public static void EnergyBalance()
+    {
+        var p = Sample();
+        Assert.Equal(2.4, Math.Round(p.UseMW, 3));
+        Assert.Equal(1.0, Math.Round(p.BatteryFlowMW, 3));
+        Assert.Equal(3.4, Math.Round(p.MakeMW, 3), "make = use + charging");
+        Assert.Equal(0.5, p.BatteryStoredMWh / p.BatteryMaxMWh);
+    }
+
+    public static void PowerScreens()
+    {
+        var p = Sample();
+        var summary = StatusFormatter.PowerSummary("Base", p, "18:00", 36);
+        Assert.True(summary.Contains("Make  3.4 MW"), summary);
+        Assert.True(summary.Contains("charging 1.0 MW"), summary);
+        Assert.True(summary.Contains("! 1 generator(s) off"), summary);
+
+        var sources = StatusFormatter.PowerSources("Base", p, "", 40, 10);
+        Assert.True(sources.Contains("Solar Panel 5 m x2"), sources);
+        Assert.True(sources.Contains("1/2 on"), sources);
+        Assert.True(sources.Contains("50%"), sources);
+
+        var users = StatusFormatter.PowerUsers("Base", p, "", 40, 10).Split('\n');
+        Assert.True(users[2].StartsWith("Refinery 7.5 m"), "biggest first");
+        Assert.True(users[3].StartsWith("Assembler 5 m x2"));
+        foreach (var w in new[] { 24, 30, 54 })
+            foreach (var line in StatusFormatter.PowerSources("Base", p, "18:00", w, 10).Split('\n'))
+                Assert.True(line.Length <= w);
+    }
+
+    public static void Units()
+    {
+        Assert.Equal("850 kW", StatusFormatter.Power(0.85));
+        Assert.Equal("4.2 MW", StatusFormatter.Power(4.2));
+        Assert.Equal("12.0 MWh", StatusFormatter.Energy(12));
+        Assert.Equal("2h 30m", StatusFormatter.Duration(2.5));
+        Assert.Equal("-", StatusFormatter.Duration(double.PositiveInfinity));
+    }
+
+    public static void DamageScreen()
+    {
+        var d = new DamageSnapshot { Blocks = 1245 };
+        d.Problems.Add(new DamagedBlock("Battery 2.5 m", 0.23, 1));
+        d.Problems.Add(new DamagedBlock("Connector 1.5 m", 1, 0.4));
+        var text = StatusFormatter.Damage("Base", d, "", 40, 10);
+        Assert.True(text.Contains("Blocks 1 245  damaged 1  unfinished 1"), text);
+        var lines = text.Split('\n');
+        Assert.True(lines[2].StartsWith("Battery 2.5 m"), "worst first");
+        Assert.True(lines[3].Contains("build  40%"), lines[3]);
+
+        var many = new DamageSnapshot { Blocks = 100 };
+        foreach (var b in new[] { 0.01, 0.01, 0.02, 0.05, 0.10, 0.21, 0.71 })
+            many.Problems.Add(new DamagedBlock("Light", 1, b));
+        many.Problems.Add(new DamagedBlock("Light", 0.5, 1));
+        var groups = StatusFormatter.GroupDamage(many.Problems);
+        Assert.Equal(5, groups.Count, "1,1,2,5 | 10 | 21 | 71 build + one damaged");
+        Assert.Equal(new StatusFormatter.DamageGroup("Light", true, 4, 1, 5, 0.01), groups[0]);
+        var grouped = StatusFormatter.Damage("Base", many, "", 40, 10);
+        Assert.True(grouped.Contains("Light x4"), grouped);
+        Assert.True(grouped.Contains("build 1-5%"), grouped);
+        Assert.True(StatusFormatter.Damage("Base", new DamageSnapshot { Blocks = 10 }, "", 40, 10).Contains("No damage"));
+        Assert.False(DamageRules.IsProblem(0.9995, 1));
+    }
+}
+
+public static class PartsScreenTests
+{
+    public static void TagsWithPageAndFilter()
+    {
+        Assert.Equal(new LcdView(LcdViewKind.Category, Category.Parts, 0, 2), TagParser.Parse("[Cargo Parts 2]").LcdViews[0]);
+        Assert.Equal(new LcdView(LcdViewKind.Category, Category.Parts, 54, 2), TagParser.Parse("[Cargo Parts 2 54]").LcdViews[0]);
+        Assert.Equal(new LcdView(LcdViewKind.Category, Category.Parts, 54, 1), TagParser.Parse("[Cargo Parts 54]").LcdViews[0]);
+        Assert.Equal(0, TagParser.Parse("LCD [Cargo Ingots]").LcdViews.Count, "old filtered views removed");
+        Assert.Equal(0, TagParser.Parse("LCD [Components 2]").ScreenViews.Count, "old filtered views removed");
+    }
+
+    public static void LongerNames()
+    {
+        var cap = new CategorySummary { Label = "Parts", Category = Category.Parts, Used = 1, Max = 10, Containers = 1 };
+        var items = new[] { new ItemLine("Electronic Parts", 800, false, null), new ItemLine("Radiation Shielding", 102, false, null) };
+        var text = LcdFormatter.CategoryDetail("Base", cap, items, "", 36, 10);
+        Assert.True(text.Contains("Electronic Parts"), text);
+        Assert.True(text.Contains("Radiation Shielding"), text);
+        foreach (var line in text.Split('\n')) Assert.True(line.Length <= 36, line);
+    }
+}
+
+public static class ShortScreenTests
+{
+    public static void WithoutCargoWord()
+    {
+        var t = TagParser.Parse("Wall [Parts 54]");
+        Assert.Equal(new LcdView(LcdViewKind.Category, Category.Parts, 54, 1), t.ScreenViews[0]);
+        Assert.Equal(new LcdView(LcdViewKind.Category, Category.Parts, 0, 2), TagParser.Parse("[Parts 2]").ScreenViews[0]);
+        Assert.Equal(new LcdView(LcdViewKind.Category, Category.Ore, 0, 1), TagParser.Parse("[Ore]").ScreenViews[0]);
+        Assert.True(TagParser.Parse("[Ore]").Accepts(Category.Ore), "still a storage tag on containers");
+        Assert.Equal(0, TagParser.Parse("[Ore]").LcdViews.Count, "explicit list unchanged");
+
+        var cockpit = TagParser.Parse("Cockpit [Cargo] [Ore 40] [Power]").ScreenViews;
+        Assert.Equal(3, cockpit.Count);
+        Assert.Equal(LcdViewKind.Summary, cockpit[0].Kind);
+        Assert.Equal(LcdViewKind.Category, cockpit[1].Kind);
+        Assert.Equal(LcdViewKind.Power, cockpit[2].Kind);
+        Assert.Equal(0, TagParser.Parse("[Si] [Main] [Unload]").ScreenViews.Count);
+    }
+}
+
+public static class OreScreenTests
+{
+    public static void ShortNamesAndLow()
+    {
+        Assert.Equal("Titanium", ItemPaths.ShortOreName("Titanium Ore"));
+        Assert.Equal("Stone", ItemPaths.ShortOreName("Stone"));
+        Assert.Equal("Ice", ItemPaths.NameFromPath(@"x : Vanilla\Items\Ores\IceOre\IceOreItem.def"));
+        Assert.Equal("Iron Ore", ItemPaths.NameFromPath(@"x : Vanilla\Items\Ores\IronOre\IronOre_Item.def"), "full name kept for item tags");
+
+        var cap = new CategorySummary { Label = "Ore", Category = Category.Ore, Used = 1, Max = 10, Containers = 1 };
+        var items = new[] { new ItemLine("Uranium", 430300, true, null), new ItemLine("Gold", 20, true, null, null, true) };
+        var lines = LcdFormatter.CategoryDetail("Base", cap, items, "", 40, 10).Split('\n');
+        Assert.True(lines[3].StartsWith("Gold") && lines[3].EndsWith("20 kg (Low)"), lines[3]);
+        Assert.False(lines[2].Contains("(Low)"));
+        Assert.True(lines.All(l => l.Length <= 40));
+    }
+}
+
+public static class SkipScreenTests
+{
+    public static void SkipKeepsPosition()
+    {
+        var v = TagParser.Parse("Cockpit [Cargo] [Skip] [Power]").ScreenViews;
+        Assert.Equal(3, v.Count);
+        Assert.Equal(LcdViewKind.Skip, v[1].Kind);
+        Assert.Equal(LcdViewKind.Power, v[2].Kind, "power goes to screen 3");
+        Assert.Equal(0, TagParser.Parse("[Skip]").Items.Count, "not an item tag");
+    }
+}
+
+public static class GeneratorOutputTests
+{
+    public static void OutputShownWhenKnown()
+    {
+        var p = new PowerSnapshot();
+        p.Sources.Add(new PowerSource("Reactor 2.5 m", PowerSourceKind.Reactor, true, OutputMW: 2.5, OutputMaxMW: 3));
+        p.Sources.Add(new PowerSource("Reactor 2.5 m", PowerSourceKind.Reactor, true, OutputMW: 1.7, OutputMaxMW: 3));
+        p.Sources.Add(new PowerSource("Wind Turbine 7.5 m", PowerSourceKind.Wind, true));
+        var text = StatusFormatter.PowerSources("Base", p, "", 54, 10);
+        Assert.True(text.Contains("Reactor 2.5 m x2") && text.Contains("4.2 MW / 6.0 MW"), text);
+        Assert.True(text.Contains("Wind Turbine 7.5 m") && text.Contains(" on"), "unknown output: on/off");
+    }
+}
+
+public static class AvailablePowerTests
+{
+    public static void CanLineAndNoOutput()
+    {
+        var p = new PowerSnapshot();
+        p.Sources.Add(new PowerSource("Solar Panel 10 m", PowerSourceKind.Solar, true, OutputMW: 0.7, OutputMaxMW: 16, OutputNowMaxMW: 15));
+        p.Sources.Add(new PowerSource("Reactor 2.5 m", PowerSourceKind.Reactor, true, OutputMW: 0, OutputMaxMW: 20, OutputNowMaxMW: 20));
+        p.Sources.Add(new PowerSource("Wind Turbine 7.5 m", PowerSourceKind.Wind, true, OutputMW: 0, OutputMaxMW: 0, OutputNowMaxMW: 0));
+        p.Users.Add(new PowerUser("Refinery", 0.7, true));
+        var summary = StatusFormatter.PowerSummary("Base", p, "", 54);
+        Assert.True(summary.Contains("Can   35.0 MW now / 36.0 MW max"), summary);
+        var sources = StatusFormatter.PowerSources("Base", p, "", 54, 10);
+        Assert.True(sources.Contains("no output"), sources);
+    }
+}
+
+public static class GasAndConsumerTests
+{
+    public static void GasLines()
+    {
+        var tanks = new List<GasTank>
+        {
+            new("Hydrogen Tank 5 m", GasKind.Hydrogen, 80, 100),
+            new("Hydrogen Tank 5 m", GasKind.Hydrogen, 82, 100),
+            new("Oxygen Tank 1.5 m", GasKind.Oxygen, 10, 100),
+        };
+        var lines = StatusFormatter.GasLines(tanks, 40);
+        Assert.Equal(2, lines.Count);
+        Assert.True(lines[0].StartsWith("Hydrogen") && lines[0].Contains("81%  162 (2)"), lines[0]);
+        var wide = StatusFormatter.GasLines(tanks, 54);
+        Assert.True(wide[0].Contains("81%  162 / 200 (2)"), wide[0]);
+        Assert.Equal("64.0k", StatusFormatter.Volume(64000));
+        Assert.Equal("1.8M", StatusFormatter.Volume(1_792_000));
+        Assert.True(lines[1].StartsWith("Oxygen") && lines[1].EndsWith("LOW"), lines[1]);
+        Assert.Equal(0, StatusFormatter.GasLines(new List<GasTank>(), 40).Count);
+    }
+
+    public static void IdleConsumersListed()
+    {
+        var p = new PowerSnapshot();
+        p.Users.Add(new PowerUser("Refinery 7.5 m", 1.8, true));
+        p.Users.Add(new PowerUser("Ion Thruster 5 m", 0, true));
+        p.Users.Add(new PowerUser("Ion Thruster 5 m", 0, true));
+        var lines = StatusFormatter.PowerUsers("Base", p, "", 40, 10).Split('\n');
+        Assert.True(lines[0].StartsWith("CONSUMERS"));
+        Assert.True(lines[2].StartsWith("Refinery"), "active first");
+        Assert.True(lines[3].StartsWith("Ion Thruster 5 m x2") && lines[3].Contains("idle"), lines[3]);
+    }
+}
+
+public static class PlanningTests
+{
+    private static string Mw(double v) => StatusFormatter.Power(v);
+
+    public static void PowerShortAndOk()
+    {
+        var b = new ResourceBalance { Kind = ResourceKind.Power, UseMax = 254 };
+        b.Producers.Add(new Producer("Reactor 7.5 m", false, 80, 80, 0));
+        b.Producers.Add(new Producer("Reactor 2.5 m", false, 20, 20, 0));
+        b.Producers.Add(new Producer("Solar Panel 10 m", true, 16, 15, 0.7));
+        var lines = Planner.Advice(b, 47, Mw, "batteries", 40);
+        Assert.True(lines[0].Contains("use 254.0 MW max / can 115.0 MW"), lines[0]);
+        Assert.True(lines[1].Contains("SHORT 139.0 MW"), lines[1]);
+        Assert.True(lines[2].Contains("batteries cover 20m"), lines[2]);
+        Assert.True(lines[3].Contains("add 2x Reactor 7.5 m (80.0 MW)"), lines[3]);
+
+        b.UseMax = 50;
+        var ok = Planner.Advice(b, 47, Mw, "batteries", 40);
+        Assert.True(ok[1].Contains("OK, 65.0 MW spare"), ok[1]);
+    }
+
+    public static void GasShort()
+    {
+        var b = new ResourceBalance { Kind = ResourceKind.Hydrogen, UseMax = 3000 };
+        b.Producers.Add(new Producer("O2/H2 Generator 5 m", false, 1000, 1000, 0));
+        var lines = Planner.Advice(b, 0, StatusFormatter.Volume, "tanks", 40);
+        Assert.True(lines[0].StartsWith("H2") && lines[0].Contains("use 3.0k max / can 1.0k"), lines[0]);
+        Assert.True(lines[2].Contains("add 2x O2/H2 Generator 5 m"), lines[2]);
+    }
+
+    public static void ConsumersShowMax()
+    {
+        var p = new PowerSnapshot();
+        p.Users.Add(new PowerUser("Refinery 7.5 m", 1.8, true, 4));
+        p.Users.Add(new PowerUser("Ion Thruster 5 m", 0, true, 12));
+        var text = StatusFormatter.PowerUsers("Base", p, "", 54, 10);
+        Assert.True(text.Contains("max 16.0 MW"), text);
+        Assert.True(text.Contains("1.8 MW /   4.0 MW"), text);
+        Assert.True(text.Contains("idle /  12.0 MW"), text);
+    }
+}
+
+public static class PartsOrderTests
+{
+    public static void MassItemsFirstThenPieces()
+    {
+        var items = new List<ItemLine> { new("Steel Plate", 900, false, null), new("Iron", 50, true, null), new("Motor", 20, false, null), new("Copper", 4000, true, null) };
+        var lines = LcdFormatter.CategoryDetail("Base", null, items, "", 40, 10).Split('\n');
+        Assert.True(lines[2].StartsWith("Copper") && lines[3].StartsWith("Iron"), "t first, biggest first");
+        Assert.True(lines[4].StartsWith("Steel Plate") && lines[5].StartsWith("Motor"), "then pieces");
+    }
+}
+

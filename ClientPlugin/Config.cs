@@ -34,6 +34,11 @@ public class Config : INotifyPropertyChanged
 
     private bool tidyConsolidate = true;
     private bool tidyMergeExperimental = false;
+    private bool autoAmmoProduction = true;
+    private float ammoReserveMultiplier = 2f;
+    private int ammoBatchSize = 25;
+    private float ammoReserveMinutes = 5f;
+    private bool ammoOrderWithoutMaterials = true;
     private TidyOrder tidyOrder = TidyOrder.Off;
 
     private float unloadIntervalSeconds = 1f;
@@ -55,6 +60,7 @@ public class Config : INotifyPropertyChanged
     private int lcdMaxLines = 12;
     private bool lcdShowRates = false;
     private int deliveryShowMinutes = 60;
+    private float lowOreTons = 1f;
 
     #endregion
 
@@ -74,7 +80,7 @@ public class Config : INotifyPropertyChanged
     [Checkbox(label: "Verbose log", description: "Log every planned and done transfer (for testing)")]
     public bool VerboseLog { get => verboseLog; set => SetField(ref verboseLog, value); }
 
-    [Checkbox(label: "HUD messages", description: "Show short messages on screen (falls back to the log until the HUD API is found)")]
+    /// <summary>Not shown in settings: no game HUD call yet, messages go to [Alerts] and the log.</summary>
     public bool HudMessages { get => hudMessages; set => SetField(ref hudMessages, value); }
 
     [Separator("Unload docks")]
@@ -88,7 +94,7 @@ public class Config : INotifyPropertyChanged
     [Textbox(label: "[Unload All] keeps", description: "Categories the ship keeps at an [Unload All] dock, e.g. Tools, Consumables, Ammo, Cells")]
     public string UnloadAllKeeps { get => unloadAllKeeps; set => SetField(ref unloadAllKeeps, value ?? ""); }
 
-    [Checkbox(label: "Fallback to untagged cargo", description: "If no tagged container has room, unload into any untagged cargo container")]
+    [Checkbox(label: "Fallback to untagged cargo", description: "If no tagged container has room (or none exists), docked ships and production outputs (refinery, smelter, assembler, fabricator, Gearforge) unload into any untagged cargo container")]
     public bool FallbackToUntaggedCargo { get => fallbackToUntaggedCargo; set => SetField(ref fallbackToUntaggedCargo, value); }
 
     [Separator("Sorting")]
@@ -119,11 +125,28 @@ public class Config : INotifyPropertyChanged
     [Checkbox(label: "Consolidate", description: "Pack the same item into as few same-tag containers as possible")]
     public bool TidyConsolidate { get => tidyConsolidate; set => SetField(ref tidyConsolidate, value); }
 
-    [Checkbox(label: "Merge stacks (experimental)", description: "Join split stacks inside a container. Needs testing in M5.")]
+    [Checkbox(label: "Merge stacks", description: "Join split stacks of the same item inside a container")]
     public bool TidyMergeExperimental { get => tidyMergeExperimental; set => SetField(ref tidyMergeExperimental, value); }
 
-    [Dropdown(label: "Order items", description: "Reorder items inside containers. Not implemented yet (M5).")]
+    /// <summary>Not shown in settings yet (item ordering inside containers is not done).</summary>
     public TidyOrder TidyOrder { get => tidyOrder; set => SetField(ref tidyOrder, value); }
+
+    [Separator("Weapon ammo")]
+
+    [Checkbox(label: "Auto ammo production", description: "Queue ammo for turrets and fixed weapons in Gearforges named [Make Ammo] when stock is below target (only when the Gearforge is idle)")]
+    public bool AutoAmmoProduction { get => autoAmmoProduction; set => SetField(ref autoAmmoProduction, value); }
+
+    [Slider(0, 30, 1, SliderAttribute.SliderType.Float, label: "Ammo reserve (minutes of fire)", description: "Stock target = every weapon reloaded once + ammo for this many minutes with all weapons firing (rate read from the game)")]
+    public float AmmoReserveMinutes { get => ammoReserveMinutes; set => SetField(ref ammoReserveMinutes, Math.Clamp(value, 0f, 30f)); }
+
+    [Checkbox(label: "Order ammo without materials", description: "Queue ammo even when the parts are missing; the game then asks connected Assemblers/Fabricators for them (needs those blocks, and ore or parts on the grid)")]
+    public bool AmmoOrderWithoutMaterials { get => ammoOrderWithoutMaterials; set => SetField(ref ammoOrderWithoutMaterials, value); }
+
+    [Slider(0, 5, 0.5, SliderAttribute.SliderType.Float, label: "Ammo reserve fallback (x reload)", description: "Used only when the game gives no fire rate: target = one reload + this many reloads in storage")]
+    public float AmmoReserveMultiplier { get => ammoReserveMultiplier; set => SetField(ref ammoReserveMultiplier, Math.Clamp(value, 0f, 5f)); }
+
+    [Slider(1, 100, 1, SliderAttribute.SliderType.Integer, label: "Ammo batch (recipes)", description: "Most recipes queued at once per Gearforge. Never more than the stock is missing. Bigger = stock fills faster, but Assemblers make the ammo parts first")]
+    public int AmmoBatchSize { get => ammoBatchSize; set => SetField(ref ammoBatchSize, Math.Clamp(value, 1, 100)); }
 
     [Separator("LCD screens")]
 
@@ -147,6 +170,9 @@ public class Config : INotifyPropertyChanged
 
     [Slider(5, 240, 5, SliderAttribute.SliderType.Integer, label: "Show last delivery (min)", description: "How long the last delivery (+ column) stays on [Cargo Ore] style screens")]
     public int DeliveryShowMinutes { get => deliveryShowMinutes; set => SetField(ref deliveryShowMinutes, Math.Clamp(value, 5, 240)); }
+
+    [Slider(0, 50, 0.5, SliderAttribute.SliderType.Float, label: "Low ore (t)", description: "Ores below this amount get \"(Low)\" on [Ore] screens. 0 = off")]
+    public float LowOreTons { get => lowOreTons; set => SetField(ref lowOreTons, Math.Clamp(value, 0f, 50f)); }
 
     [Checkbox(label: "Show rates per minute", description: "Show +/- per minute next to items. Off by default: ore arrives in batches by ship.")]
     public bool LcdShowRates { get => lcdShowRates; set => SetField(ref lcdShowRates, value); }
@@ -176,7 +202,7 @@ public class Config : INotifyPropertyChanged
     [Textbox(label: "Block role overrides", description: "BlockKind GUID=Storage|Producer|Consumer, separated by ';'. GUIDs come from the discovery report.")]
     public string BlockRoleOverrides { get => blockRoleOverrides; set => SetField(ref blockRoleOverrides, value ?? ""); }
 
-    [Button(label: "Write discovery report", description: "Writes block kinds, item types, connector and physics members to discovery.txt in the plugin data folder (for M1)")]
+    [Button(label: "Write discovery report", description: "Writes block kinds, item types, connector and physics members to discovery.txt in the plugin data folder. Useful for bug reports and modded blocks")]
     public void WriteDiscoveryReport() => Game.Discovery.Requested = true;
 
     [Button(label: "Reset error stop", description: "Re-enable the plugin after it stopped itself because of an error")]
@@ -189,7 +215,7 @@ public class Config : INotifyPropertyChanged
     [XmlIgnore]
     public HashSet<Category> UnloadAllKeepSet => Routing.ParseCategories(unloadAllKeeps);
 
-    public RoutingOptions ToRoutingOptions() => new RoutingOptions
+    public RoutingOptions ToRoutingOptions() => new()
     {
         OverflowToEmpty = overflowToEmpty,
         AutoCategories = autoCategories,
@@ -201,8 +227,8 @@ public class Config : INotifyPropertyChanged
 
     #region Property change notification boilerplate
 
-    public static readonly Config Default = new Config();
-    public static Config Current = ConfigStorage.Load();
+    public static readonly Config Default = new();
+    public static Config Current { get; } = ConfigStorage.Load();
 
     public event PropertyChangedEventHandler PropertyChanged;
 

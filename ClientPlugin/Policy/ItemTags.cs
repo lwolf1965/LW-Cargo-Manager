@@ -10,7 +10,7 @@ public readonly record struct ItemTag(string Text, int Priority);
 /// <summary>An item as the policy sees it: its category and its readable name ("Silicon Ore").</summary>
 public readonly record struct ItemKey(Category Category, string Name)
 {
-    public static implicit operator ItemKey(Category category) => new ItemKey(category, null);
+    public static implicit operator ItemKey(Category category) => new(category, null);
 }
 
 /// <summary>
@@ -22,7 +22,7 @@ public readonly record struct ItemKey(Category Category, string Name)
 /// </summary>
 public static class ItemMatch
 {
-    private static readonly Dictionary<string, string> Symbols = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, string> Symbols = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Fe"] = "Iron", ["Ni"] = "Nickel", ["Si"] = "Silicon", ["Co"] = "Cobalt", ["Mg"] = "Magnesium",
         ["Ag"] = "Silver", ["Au"] = "Gold", ["Pt"] = "Platinum", ["U"] = "Uranium", ["Cu"] = "Copper",
@@ -63,5 +63,5 @@ public static class ItemMatch
         text.Split(new[] { ' ', '_', '-' }, StringSplitOptions.RemoveEmptyEntries).ToList();
 
     private static string Normalize(string text) =>
-        new string(text.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+        new(text.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 }

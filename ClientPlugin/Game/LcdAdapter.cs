@@ -44,7 +44,7 @@ internal static class LcdAdapter
     private static object monoFont;
     private static bool stateLogged;
 
-    private static readonly Dictionary<Type, Api> Apis = new Dictionary<Type, Api>();
+    private static readonly Dictionary<Type, Api> Apis = new();
 
     public static bool Supported { get; private set; }
 
@@ -172,7 +172,7 @@ internal static class LcdAdapter
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
         api = new Api
         {
-            SurfaceCount = type.GetProperty("SurfaceCount", flags),
+            SurfaceCount = Reflect.Property(type, "SurfaceCount"),
             SetText = type.GetMethod("SetSurfaceText", flags, null, new[] { typeof(int), typeof(string) }, null),
         };
         var setContent = type.GetMethods(flags).FirstOrDefault(m =>
@@ -195,7 +195,7 @@ internal static class LcdAdapter
         api.SetFont = type.GetMethods(flags).FirstOrDefault(m => m.Name == "SetSurfaceFont" && m.GetParameters().Length == 2);
         (api.SetHAlign, api.LeftValue) = EnumSetter(type, flags, "SetSurfaceHorizontalAlignment", "Left");
         (api.SetVAlign, api.TopValue) = EnumSetter(type, flags, "SetSurfaceVerticalAlignment", "Top");
-        api.SurfaceStates = type.GetProperty("SurfaceStates", flags);
+        api.SurfaceStates = Reflect.Property(type, "SurfaceStates");
         var stateType = api.SurfaceStates?.PropertyType.GetElementType();
         api.FontField = stateType?.GetFields(flags).FirstOrDefault(f =>
             f.FieldType.Name.StartsWith("ResourceHandle", StringComparison.Ordinal)
@@ -218,7 +218,7 @@ internal static class LcdAdapter
 internal static class ItemNames
 {
     private static readonly string[] NameMembers = { "DisplayName", "DisplayNameText", "Name", "SubtypeId", "SubtypeName", "Id" };
-    private static readonly Dictionary<ItemDefinition, string> Cache = new Dictionary<ItemDefinition, string>();
+    private static readonly Dictionary<ItemDefinition, string> Cache = new();
     private static MemberInfo member;
     private static bool probed;
 
@@ -240,7 +240,7 @@ internal static class ItemNames
             var type = definition.GetType();
             foreach (var n in NameMembers)
             {
-                member = (MemberInfo)type.GetProperty(n, flags) ?? type.GetField(n, flags);
+                member = Reflect.Member(type, n);
                 if (member != null) break;
             }
             PluginLog.Info($"Item name probe: {(member == null ? "none, using ToString()" : member.Name)}");

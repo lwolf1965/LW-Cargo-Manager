@@ -9,7 +9,7 @@ public enum Category
     None = 0,
     Ore,
     Ice,
-    /// <summary>SE2 "Material" and "Component" items (ingots, plates, frames ...). Tag [Parts]; [Components], [Ingots] are aliases.</summary>
+    /// <summary>SE2 "Material" and "Component" items (refined metals, plates, frames ...). Tag [Parts].</summary>
     Parts,
     Ammo,
     Tools,

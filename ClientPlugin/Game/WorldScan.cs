@@ -43,15 +43,15 @@ internal sealed class GridInfo
     public int Id;
     public bool IsStatic;
     public int FunctionalBlockCount;
-    public readonly List<Store> Stores = new List<Store>();
-    public readonly List<BlockRef> Blocks = new List<BlockRef>();
+    public readonly List<Store> Stores = new();
+    public readonly List<BlockRef> Blocks = new();
 }
 
 /// <summary>Snapshot of all inventories the local player can use. Rebuilt every pass.</summary>
 internal sealed class WorldScan
 {
-    public readonly Dictionary<CubeGridComponent, GridInfo> Grids = new Dictionary<CubeGridComponent, GridInfo>();
-    public readonly Dictionary<InventoryComponent, Store> Stores = new Dictionary<InventoryComponent, Store>();
+    public readonly Dictionary<CubeGridComponent, GridInfo> Grids = new();
+    public readonly Dictionary<InventoryComponent, Store> Stores = new();
 
     public static WorldScan Build(Session session, IdentityId player, BlockRoles roles, int defaultPriority)
     {
@@ -87,6 +87,8 @@ internal sealed class WorldScan
             gridInfo.Blocks.Add(new BlockRef { Entity = entity, Block = block, Grid = grid, Name = name, Tags = tags, BlockKind = kind });
 
             var role = roles.RoleOf(kind);
+            if (role == BlockRole.Consumer && !roles.IsKnown(kind))
+                role = AutoRole(entity, kind, name);
             if (role == BlockRole.Consumer)
                 continue;
 
@@ -119,6 +121,22 @@ internal sealed class WorldScan
         }
 
         return scan;
+    }
+
+    private static readonly Dictionary<Guid, BlockRole> AutoRoles = new();
+
+    /// <summary>Modded / unknown block kinds: role from the components (cached per kind, logged once).</summary>
+    private static BlockRole AutoRole(Entity entity, Guid? kind, string name)
+    {
+        if (!kind.HasValue) return BlockRole.Consumer;
+        if (AutoRoles.TryGetValue(kind.Value, out var cached)) return cached;
+        var names = new HashSet<string>();
+        foreach (var component in entity.Components) names.Add(component.GetType().Name);
+        var role = BlockRoles.AutoRole(names);
+        AutoRoles[kind.Value] = role;
+        if (role != BlockRole.Consumer)
+            PluginLog.Info($"Unknown block kind {kind.Value} ('{name}') treated as {role} (from its components)");
+        return role;
     }
 
     /// <summary>Fresh policy view of one inventory (mass and contents change after transfers).</summary>
@@ -166,7 +184,7 @@ internal sealed class WorldScan
 /// <summary>
 /// Who may the plugin act for? Design: "whatever the game lets the player open".
 /// TODO(M1, item 6): use the game's real access rule (faction / share settings).
-/// For now: owned by the local player (same as AutoSorter 0.2.4).
+/// For now: owned by the local player.
 /// </summary>
 internal static class AccessCheck
 {

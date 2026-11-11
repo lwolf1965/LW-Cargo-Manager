@@ -12,8 +12,11 @@ namespace ClientPlugin;
 public class Plugin : IPlugin
 {
     public const string Name = "LwCargoManager";
-    /// <summary>Shown in the log. Pulsar compiles from source and ignores Version.Build.props, so keep this in sync.</summary>
-    public const string Version = "0.3.0";
+    /// <summary>
+    /// Plugin version, the only place to change it (AssemblyInfo.cs uses it). Scheme: STAGE.FEATURE.FIX.BUILD where
+    /// STAGE follows the game: 0.1 = game alpha, 0.2 = game beta, 1 = game released.
+    /// </summary>
+    public const string Version = "0.1.0.1";
     public static Plugin Instance;
 
     // The data directory will be provided by a proper SDK in the future.

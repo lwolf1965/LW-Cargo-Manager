@@ -10,7 +10,7 @@ namespace ClientPlugin.Policy;
 /// </summary>
 public sealed class GraceTracker<TInventory, TItem>
 {
-    private readonly Dictionary<(TInventory, TItem), double> marks = new Dictionary<(TInventory, TItem), double>();
+    private readonly Dictionary<(TInventory, TItem), double> marks = new();
     private readonly Func<double> clockSeconds;
 
     public GraceTracker(Func<double> clockSeconds)

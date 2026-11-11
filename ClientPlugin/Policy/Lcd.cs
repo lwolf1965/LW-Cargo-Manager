@@ -22,7 +22,8 @@ public sealed class CategorySummary
 
 /// <summary>One item row on a category screen.</summary>
 /// <summary>One item row on a category screen. Delivered = amount of this item in the last delivery (if recent).</summary>
-public readonly record struct ItemLine(string Name, double Amount, bool IsMass, double? RatePerMinute, double? Delivered = null);
+/// <summary>Low: the amount is below the "low" warning level (ores: under 1 t by default), shown as "(Low)".</summary>
+public readonly record struct ItemLine(string Name, double Amount, bool IsMass, double? RatePerMinute, double? Delivered = null, bool Low = false);
 
 public static class CargoSummary
 {
@@ -39,10 +40,14 @@ public static class CargoSummary
         var storage = stores.Where(s => s.Role == BlockRole.Storage && !s.Tags.Lock).ToList();
         var rows = new List<CategorySummary>();
 
-        var categories = storage.SelectMany(s => s.Tags.Categories).Select(t => t.Category).Distinct()
+        // Categories tagged directly; categories that only come from a group ([Player]) get one group row instead.
+        var categories = storage.SelectMany(s => s.Tags.Categories).Where(t => t.Group == null).Select(t => t.Category).Distinct()
             .OrderBy(ItemClassifier.SortRank);
         foreach (var category in categories)
-            rows.Add(Row(Label(category), category, storage.Where(s => s.Tags.Accepts(category))));
+            rows.Add(Row(Label(category), category, storage.Where(s => s.Tags.Categories.Any(t => t.Category == category && t.Group == null))));
+
+        foreach (var group in storage.SelectMany(s => s.Tags.Categories).Where(t => t.Group != null).Select(t => t.Group).Distinct())
+            rows.Add(Row(group, Category.None, storage.Where(s => s.Tags.Categories.Any(t => t.Group == group))));
 
         // Item-tagged containers ([Si]) without a category tag: one row per tag text.
         foreach (var group in storage.Where(s => !s.Tags.HasAnyCategory && s.Tags.HasAnyItemTag)
@@ -183,10 +188,20 @@ public static class LcdFormatter
         $"{row.Label,-11}{Bar(row.Fraction)} {Percent(row),4}  {Mass(row.Used)} / {Mass(row.Max)} ({row.Containers})";
 
     /// <summary>[Cargo Ore] etc.: capacity line, then items, biggest first. Rates are shown when known.</summary>
-    public static string CategoryDetail(string gridName, CategorySummary capacity, IReadOnlyList<ItemLine> items, string clock, int width, int maxLines, string footer = null)
+    public static string CategoryDetail(string gridName, CategorySummary capacity, IReadOnlyList<ItemLine> items, string clock, int width, int maxLines,
+        string footer = null, int page = 1, string label = null)
     {
         var sb = new StringBuilder();
-        var label = (capacity?.Label ?? "-").ToUpperInvariant();
+        // Items in t/kg first (ore, materials), then items in pieces (components), each biggest first:
+        // on [Parts] the two kinds stay together and pages simply continue.
+        var sorted = items.Where(i => i.Amount > 0).OrderByDescending(i => i.IsMass).ThenByDescending(i => i.Amount)
+            .ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        var perPage = maxLines <= 0 ? Math.Max(1, sorted.Count) : maxLines;
+        var pages = Math.Max(1, (sorted.Count + perPage - 1) / perPage);
+        page = Math.Max(1, page);
+
+        label = (label ?? capacity?.Label ?? "-").ToUpperInvariant();
+        if (pages > 1 || page > 1) label += $" {page}/{pages}";
         sb.AppendLine(Header($"{label} - {gridName}", clock, width));
         if (capacity != null && capacity.Containers > 0)
             sb.AppendLine(width >= WideWidth
@@ -195,23 +210,32 @@ public static class LcdFormatter
         else
             sb.AppendLine($"No [{capacity?.Label}] containers - showing all storage");
 
-        var sorted = items.Where(i => i.Amount > 0).OrderByDescending(i => i.Amount).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
         if (sorted.Count == 0)
             sb.AppendLine("(empty)");
 
-        var shown = maxLines <= 0 ? sorted.Count : Math.Min(sorted.Count, maxLines);
-        for (var i = 0; i < shown; i++)
+        // Names get all the room the screen has: width minus the amount column and the +delivery / rate column.
+        var extra = (sorted.Any(i => i.RatePerMinute.HasValue) ? 14 : sorted.Any(i => i.Delivered is > 0) ? 10 : 0)
+                    + (sorted.Any(i => i.Low) ? 6 : 0);
+        var nameWidth = Math.Clamp(width - 11 - extra, 12, 32);
+
+        var first = (page - 1) * perPage;
+        var last = Math.Min(sorted.Count, first + perPage);
+        if (first >= sorted.Count && sorted.Count > 0)
+            sb.AppendLine($"(list ends on page {pages})");
+        for (var i = first; i < last; i++)
         {
             var item = sorted[i];
-            var line = $"{Fit(item.Name, 14),-14}{Amount(item.Amount, item.IsMass),10}";
+            var line = Fit(item.Name, nameWidth).PadRight(nameWidth) + " " + Amount(item.Amount, item.IsMass).PadLeft(10);
+            if (item.Low)
+                line += " (Low)";
             if (item.Delivered.HasValue && item.Delivered.Value > 0)
                 line += $"  +{Amount(item.Delivered.Value, item.IsMass)}";
             if (item.RatePerMinute.HasValue)
                 line += "  " + Rate(item.RatePerMinute.Value, item.IsMass);
             sb.AppendLine(line);
         }
-        if (shown < sorted.Count)
-            sb.AppendLine($"... +{sorted.Count - shown} more");
+        if (last < sorted.Count)
+            sb.AppendLine($"... +{sorted.Count - last} more (page {page + 1})");
         if (!string.IsNullOrEmpty(footer))
             sb.AppendLine(footer);
 
@@ -287,7 +311,7 @@ public static class LcdFormatter
 /// </summary>
 public sealed class RateTracker<TKey>
 {
-    private readonly Dictionary<TKey, Queue<(double Time, double Amount)>> samples = new Dictionary<TKey, Queue<(double, double)>>();
+    private readonly Dictionary<TKey, Queue<(double Time, double Amount)>> samples = new();
 
     public double WindowSeconds { get; init; } = 120;
     public double MinSpanSeconds { get; init; } = 30;
@@ -327,7 +351,7 @@ public sealed class RateTracker<TKey>
 /// <summary>Recent plugin messages for [Cargo Alerts] screens (also the HUD fallback).</summary>
 public sealed class AlertLog
 {
-    private readonly LinkedList<(double Time, string Text)> entries = new LinkedList<(double, string)>();
+    private readonly LinkedList<(double Time, string Text)> entries = new();
     public int Capacity { get; init; } = 8;
     public double MaxAgeSeconds { get; init; } = 600;
 
@@ -370,7 +394,7 @@ public sealed class Delivery<TItem>
 /// </summary>
 public sealed class DeliveryTracker<TGrid, TItem>
 {
-    private readonly Dictionary<TGrid, Delivery<TItem>> last = new Dictionary<TGrid, Delivery<TItem>>();
+    private readonly Dictionary<TGrid, Delivery<TItem>> last = new();
 
     public double MergeGapSeconds { get; init; } = 30;
     public double ShowForSeconds { get; set; } = 3600;

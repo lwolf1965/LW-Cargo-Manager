@@ -15,10 +15,11 @@ namespace ClientPlugin.Game;
 /// </summary>
 internal static class LcdJob
 {
-    private static readonly Dictionary<(object, int), string> LastText = new Dictionary<(object, int), string>();
+    private static readonly Dictionary<(object, int), string> LastText = new();
+    private static readonly HashSet<LcdViewKind> ScreenErrors = new();
     /// <summary>Block name + settings each surface was last styled for; a change restyles it.</summary>
-    private static readonly Dictionary<(object, int), string> Styled = new Dictionary<(object, int), string>();
-    private static readonly RateTracker<(CubeGridComponent, ItemDefinition)> Rates = new RateTracker<(CubeGridComponent, ItemDefinition)>();
+    private static readonly Dictionary<(object, int), string> Styled = new();
+    private static readonly RateTracker<(CubeGridComponent, ItemDefinition)> Rates = new();
     private static bool unsupportedWarned;
 
     public static void Run(WorldScan scan, RunState state, Config config, double now)
@@ -29,36 +30,54 @@ internal static class LcdJob
 
         foreach (var grid in scan.Grids.Values)
         {
-            var lcds = grid.Blocks.Where(b => b.Tags.IsLcd).ToList();
+            var lcds = grid.Blocks.Where(b => b.Tags.ScreenViews.Count > 0).ToList(); // blocks without LCD surfaces are skipped below
             if (lcds.Count == 0) continue;
 
             var infos = grid.Stores.Select(s => s.Info).ToList();
             var delivery = CargoEngine.Deliveries.Recent(grid.Grid, now);
             var rows = CargoSummary.Build(infos);
-            var totals = config.LcdShowRates || lcds.Any(l => l.Tags.LcdViews.Any(v => v.Kind == LcdViewKind.Category))
+            var totals = config.LcdShowRates || lcds.Any(l => l.Tags.ScreenViews.Any(v => v.Kind == LcdViewKind.Category))
                 ? ItemTotals(grid, now, config.LcdShowRates)
                 : null;
 
+            PowerSnapshot power = null; // read once per grid, only if a power screen needs it
             foreach (var lcd in lcds)
             {
                 var surfaces = LcdAdapter.Surfaces(lcd.Entity);
                 if (surfaces.Count == 0) continue;
-                var title = TitleOf(lcd);
+                var title = TitleOf(lcd, grid.Grid);
                 foreach (var s in surfaces) LcdAdapter.LearnFont(s);
 
-                for (var i = 0; i < lcd.Tags.LcdViews.Count && i < surfaces.Count; i++)
+                for (var i = 0; i < lcd.Tags.ScreenViews.Count && i < surfaces.Count; i++)
                 {
-                    var view = lcd.Tags.LcdViews[i];
+                    var view = lcd.Tags.ScreenViews[i];
+                    if (view.Kind == LcdViewKind.Skip) continue; // screen left to the game
                     var width = view.Width > 0 ? view.Width : config.LcdWidth; // [Cargo Ore 54] overrides the setting
-                    var text = view.Kind switch
+                    string text;
+                    try
+                    {
+                    text = view.Kind switch
                     {
                         LcdViewKind.Summary => LcdFormatter.Summary(title, rows, StatusLines(state, grid, delivery, now), clock, width),
                         LcdViewKind.Category => LcdFormatter.CategoryDetail(title, CargoSummary.For(infos, view.Category),
-                            Lines(totals, view.Category, grid, config.LcdShowRates, delivery), clock, width, config.LcdMaxLines,
-                            Footer(delivery, view.Category, now)),
+                            Lines(totals, view.Category, grid, config.LcdShowRates, delivery, config.LowOreTons * 1000), clock, width, config.LcdMaxLines,
+                            view.Page == 1 ? Footer(delivery, view.Category, now, view.Category == Category.Ice ? IceExtras(grid, width) : null) : null, view.Page),
                         LcdViewKind.Ruler => LcdFormatter.Ruler(160, 60),
-                        _ => LcdFormatter.Alerts(title, rows, Problems(), CargoEngine.Alerts.Recent(now, config.LcdMaxLines), clock, width),
+                        LcdViewKind.Power => StatusFormatter.PowerSummary(title, power ??= StatusReader.ReadPower(grid), clock, width),
+                        LcdViewKind.PowerSources => StatusFormatter.PowerSources(title, power ??= StatusReader.ReadPower(grid), clock, width, config.LcdMaxLines),
+                        LcdViewKind.PowerUsers => StatusFormatter.PowerUsers(title, power ??= StatusReader.ReadPower(grid), clock, width, config.LcdMaxLines),
+                        LcdViewKind.Damage => StatusFormatter.Damage(title, StatusReader.ReadDamage(grid, now), clock, width, config.LcdMaxLines),
+                        LcdViewKind.Turrets => AmmoPlanner.Screen(title, AmmoJob.Status.TryGetValue(grid.Grid, out var ammo) ? ammo : new List<AmmoStatus>(), clock, width),
+                        _ => LcdFormatter.Alerts(title, rows, Problems(grid, now), CargoEngine.Alerts.Recent(now, config.LcdMaxLines), clock, width),
                     };
+                    }
+                    catch (Exception e)
+                    {
+                        // A broken screen must never stop sorting and unloading: show the error on that screen only.
+                        if (ScreenErrors.Add(view.Kind))
+                            PluginLog.Warn($"LCD '{lcd.Name}' {view.Kind} screen failed (shown on the screen, plugin keeps running): {e}");
+                        text = $"{view.Kind.ToString().ToUpperInvariant()} - screen error\n{e.GetType().Name}\nsee game log [LwCargoManager]";
+                    }
 
                     var surface = surfaces[i];
                     var key = (surface.Panel, surface.Index);
@@ -123,20 +142,39 @@ internal static class LcdJob
         return totals;
     }
 
-    private static List<ItemLine> Lines(Dictionary<ItemDefinition, double> totals, Category category, GridInfo grid, bool rates, Delivery<ItemDefinition> delivery)
+    private static List<ItemLine> Lines(Dictionary<ItemDefinition, double> totals, Category category, GridInfo grid, bool rates, Delivery<ItemDefinition> delivery, double lowOreKg = 0)
     {
         var lines = new List<ItemLine>();
         if (totals == null) return lines;
         foreach (var pair in totals)
         {
             if (ItemTraitsMapper.CategoryOf(pair.Key) != category) continue;
-            // Ore, ice and materials (ingots) in kg: amount × MassPerUnit. Components in pieces.
+            // Ore, ice and refined metals in kg: amount × MassPerUnit. Components in pieces.
             var isMass = IsMassItem(pair.Key, category);
             var unit = isMass ? KgPerUnit(pair.Key) : 1.0;
             var rate = rates ? Rates.PerMinute((grid.Grid, pair.Key)) * unit : null;
             double? delivered = delivery != null && delivery.Items.TryGetValue(pair.Key, out var d) ? d * unit : null;
-            lines.Add(new ItemLine(ItemNames.Of(pair.Key), pair.Value * unit, isMass, rate, delivered));
+            var amount = pair.Value * unit;
+            var name = ItemNames.Of(pair.Key);
+            var low = false;
+            if (category == Category.Ore)
+            {
+                name = ItemPaths.ShortOreName(name);
+                low = lowOreKg > 0 && amount < lowOreKg;
+            }
+            lines.Add(new ItemLine(name, amount, isMass, rate, delivered, low));
         }
+        return lines;
+    }
+
+    /// <summary>Ice screen extras: tank fill, then hydrogen / oxygen full-load planning.</summary>
+    private static List<string> IceExtras(GridInfo grid, int width)
+    {
+        var tanks = StatusReader.ReadGas(grid);
+        var lines = StatusFormatter.GasLines(tanks, width);
+        var (h2, o2) = StatusReader.ReadGasBalance(grid);
+        if (h2 != null) lines.AddRange(Planner.Advice(h2, tanks.Where(t => t.Gas == GasKind.Hydrogen).Sum(t => t.Stored), StatusFormatter.Volume, "tanks", width));
+        if (o2 != null) lines.AddRange(Planner.Advice(o2, tanks.Where(t => t.Gas == GasKind.Oxygen).Sum(t => t.Stored), StatusFormatter.Volume, "tanks", width));
         return lines;
     }
 
@@ -149,7 +187,15 @@ internal static class LcdJob
     }
 
     /// <summary>"Last delivery: 5.2 t, 4m ago (Dock A)" for the items of this category, or null.</summary>
-    private static string Footer(Delivery<ItemDefinition> delivery, Category category, double now)
+    private static string Footer(Delivery<ItemDefinition> delivery, Category category, double now, List<string> extra = null)
+    {
+        var tail = extra != null && extra.Count > 0 ? string.Join("\n", extra) : null;
+        var last = LastDelivery(delivery, category, now);
+        if (last == null) return tail;
+        return tail == null ? last : last + "\n" + tail;
+    }
+
+    private static string LastDelivery(Delivery<ItemDefinition> delivery, Category category, double now)
     {
         if (delivery == null) return null;
         // Always kg here: a delivery can mix materials and components.
@@ -169,11 +215,19 @@ internal static class LcdJob
         return mpu > 0 ? mpu : 1.0;
     }
 
-    private static IEnumerable<string> Problems()
+    private static IEnumerable<string> Problems(GridInfo grid, double now)
     {
         if (!ConnectorAdapter.Supported) yield return "Connector API unknown (fallback mode)";
+        foreach (var line in ConveyorAlerts.For(grid, now)) yield return line;
     }
 
-    /// <summary>LCD name without tags, e.g. "Base LCD [Cargo]" → "Base LCD".</summary>
-    private static string TitleOf(BlockRef lcd) => TagParser.StripTags(lcd.Name, "Grid");
+    /// <summary>
+    /// LCD name without tags ("Base LCD [Cargo]" → "Base LCD"). An LCD named only with tags shows the
+    /// grid's name ("Black Widow"), else "Grid".
+    /// </summary>
+    private static string TitleOf(BlockRef lcd, CubeGridComponent grid)
+    {
+        var own = TagParser.StripTags(lcd.Name, "");
+        return own.Length > 0 ? own : GridNames.Of(grid) ?? "Grid";
+    }
 }

@@ -10,13 +10,13 @@ namespace ClientPlugin.Game;
 
 /// <summary>
 /// Turns a game ItemDefinition into game-independent ItemTraits.
-/// Ore / Material / Component come from ItemTypes (confirmed in AutoSorter).
+/// Ore / Material / Component come from ItemTypes (confirmed in game).
 /// SE2 has no Ammo / Ice flags: those (and power cells) are recognised from the item's content path
 /// (ItemPaths). Consumable is matched by enum name.
 /// </summary>
 internal static class ItemTraitsMapper
 {
-    private static readonly Dictionary<ItemDefinition, Category> Cache = new Dictionary<ItemDefinition, Category>();
+    private static readonly Dictionary<ItemDefinition, Category> Cache = new();
     private static HashSet<Guid> toolItems;
     private static List<(ItemTypes Flag, ItemTraits Trait)> namedFlags;
 

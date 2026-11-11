@@ -12,7 +12,7 @@ public enum ItemTraits
     None = 0,
     Ore = 1 << 0,
     Ice = 1 << 1,
-    Material = 1 << 2,   // ingots
+    Material = 1 << 2,   // refined metals
     Component = 1 << 3,
     Ammo = 1 << 4,
     Tool = 1 << 5,       // hand tools and hand weapons (ToolsConfiguration)

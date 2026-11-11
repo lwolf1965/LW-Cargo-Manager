@@ -17,7 +17,7 @@ internal sealed class EssentialPatchAttribute : Attribute
 {
 }
 
-/// <summary>Captures an entity whose Scene leads to GameCoreScene (same approach as AutoSorter).</summary>
+/// <summary>Captures an entity whose Scene leads to GameCoreScene.</summary>
 [EssentialPatch]
 [HarmonyPatch(typeof(InputGameComponent), "Init", new Type[0])]
 internal static class InputInitPatch
@@ -87,7 +87,7 @@ internal static class QuickDepositPatch
     private const string MethodName = "TryDepositAllNonEssentialItemsImpl";
 
     [ThreadStatic] public static bool Active;
-    public static HashSet<Guid> Protected = new HashSet<Guid>();
+    public static HashSet<Guid> Protected = new();
 
     private static MethodBase TargetMethod()
     {
