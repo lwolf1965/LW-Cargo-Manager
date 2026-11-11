@@ -2,7 +2,7 @@
   <PropertyGroup>
     <!-- Package / display version. The assembly version comes from ClientPlugin.Plugin.Version (AssemblyInfo.cs),
          because Pulsar compiles from source and never reads this file. Keep both the same. -->
-    <Version>0.1.0.1</Version>
+    <Version>0.1.1.0</Version>
     <GenerateAssemblyVersionAttribute>false</GenerateAssemblyVersionAttribute>
     <GenerateAssemblyFileVersionAttribute>false</GenerateAssemblyFileVersionAttribute>
     <GenerateAssemblyInformationalVersionAttribute>false</GenerateAssemblyInformationalVersionAttribute>
