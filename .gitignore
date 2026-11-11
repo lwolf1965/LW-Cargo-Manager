@@ -55,3 +55,9 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# Local developer settings (paths to the game and Pulsar)
+*.user
+
+# Visual Studio cache
+.vs/

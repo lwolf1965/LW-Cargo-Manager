@@ -99,6 +99,7 @@ Base LCD [Power 54]
    - the `[Ore]` screen shows `+28.7 t` next to what arrived and a "Last delivery" line.
 
 The ship needs **no tags**. Its tools, ammo, consumables and batteries stay on the ship.
+The ship's **cockpit inventory is never touched**, not even at a dock: only cargo containers (and production outputs) are unloaded.
 
 **Single items:** want silicon in its own box? Name a container `Silicon Box [Si]`. Item tags beat category tags,
 so silicon goes there first.
@@ -486,7 +487,7 @@ open, so the plugin waits until you close it.
 | Overflow to empty | on | When all tagged containers are full, use empty untagged ones. |
 | Auto categories | off | An untagged container with one kind of item becomes a destination for it. |
 | Grace delay (s) | 60 | Items you put somewhere by hand stay there this long. 0 = off. |
-| Protect quick deposit | on | Quick deposit keeps hand tools and weapons on the character. |
+| Protect quick deposit | on | Quick deposit keeps hand tools and weapons on the character. On a self-hosted world this applies to every player's quick deposit. |
 | Default priority | 5 | Priority of tags without P1…P9. |
 
 ### Tidy
@@ -520,7 +521,7 @@ open, so the plugin waits until you close it.
 ### Performance
 | Setting | Default | What it does |
 |---|---|---|
-| Unload interval (s) | 1 | How often docks are checked. |
+| Unload interval (s) | 1 | How often docks are checked. Skipped when no `[Unload]` connector exists. |
 | Sort interval (s) | 5 | How often sorting runs. |
 | Tidy interval (s) | 10 | How often tidy and ammo production run. |
 | Max transfers per pass | 64 | Upper limit of moves per pass. |
@@ -552,9 +553,9 @@ open, so the plugin waits until you close it.
 | No ammo is made | Gearforge named `[Make Ammo]`? An Assembler/Fabricator connected, with ore or parts on the grid? **Auto ammo production** on? Look at the `[Turrets]` screen. |
 | Ammo is made slowly | Raise **Ammo batch**, add another `[Make Ammo]` Gearforge, add Assemblers for the parts. |
 | A modded block is ignored | Write the discovery report and add a **Block role override**, or open an issue with the report. |
-| "Plugin stopped" | The log says why. Fix it, then **Reset error stop** or reload the world. |
+| "Plugin stopped" | The log says why. Fix it, then **Reset error stop**, or load the world again (a newly loaded world starts without the stop). |
 | Does it work in multiplayer? | Not tested yet (SE2 multiplayer isn't released). On remote/dedicated servers the plugin stays idle. |
-| Does it slow down my game? | It does a little work several times per second with a time budget (10 ms). Big bases: raise the intervals. |
+| Does it slow down my game? | It does a little work several times per second. Every 30 s the log shows how long a pass takes (`scan avg … ms / max … ms`). Big bases: raise the intervals. |
 | Can I use it with another sorting plugin or script? | Don't. Two sorters fight over the same items. |
 
 **Game log:** `%AppData%\SpaceEngineers2\Temp\Logs`, lines start with `[LwCargoManager]`.

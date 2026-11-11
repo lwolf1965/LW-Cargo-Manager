@@ -47,11 +47,26 @@ internal sealed class GridInfo
     public readonly List<BlockRef> Blocks = new();
 }
 
-/// <summary>Snapshot of all inventories the local player can use. Rebuilt every pass.</summary>
+/// <summary>Snapshot of all inventories the local player can use. Rebuilt every pass that has work to do
+/// (unload-only ticks are skipped when the last scan found no unload dock).</summary>
 internal sealed class WorldScan
 {
     public readonly Dictionary<CubeGridComponent, GridInfo> Grids = new();
     public readonly Dictionary<InventoryComponent, Store> Stores = new();
+    /// <summary>Any owned block tagged [Unload] or [Unload All] (lets the engine skip unload-only ticks).</summary>
+    public bool HasUnloadTags;
+
+    /// <summary>Parsed tags per block name and default priority. BlockTags is immutable (init-only), so sharing is safe.</summary>
+    private static readonly Dictionary<(string, int), BlockTags> TagCache = new();
+
+    private static BlockTags ParseCached(string name, int defaultPriority)
+    {
+        if (TagCache.TryGetValue((name, defaultPriority), out var tags)) return tags;
+        if (TagCache.Count > 20000) TagCache.Clear(); // renames add entries; keep it bounded
+        tags = TagParser.Parse(name, defaultPriority);
+        TagCache[(name, defaultPriority)] = tags;
+        return tags;
+    }
 
     public static WorldScan Build(Session session, IdentityId player, BlockRoles roles, int defaultPriority)
     {
@@ -83,7 +98,8 @@ internal sealed class WorldScan
 
             var name = block.DisplayName.EvaluateText() ?? "";
             var kind = block.Definition.BlockKind?.Guid;
-            var tags = TagParser.Parse(name, defaultPriority);
+            var tags = ParseCached(name, defaultPriority);
+            if (tags.Unload || tags.UnloadAll) scan.HasUnloadTags = true;
             gridInfo.Blocks.Add(new BlockRef { Entity = entity, Block = block, Grid = grid, Name = name, Tags = tags, BlockKind = kind });
 
             var role = roles.RoleOf(kind);

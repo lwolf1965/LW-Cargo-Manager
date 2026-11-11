@@ -2,7 +2,7 @@
   <!-- Copy this file to Directory.Build.props.user (ignored by Git) and fill in your paths. -->
   <PropertyGroup>
     <!-- Folder containing SpaceEngineers2.exe (empty = auto-detect the default Steam install) -->
-    <Game2>G:\SteamLibrary\steamapps\common\SpaceEngineers2\Game2</Game2>
+    <Game2>C:\Program Files (x86)\Steam\steamapps\common\SpaceEngineers2\Game2</Game2>
 
     <!-- Pulsar folder to deploy the plugin into after each build (empty = no deployment),
          for example $(APPDATA)\Pulsar on Windows or $(HOME)/.config/Pulsar on Linux -->

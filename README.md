@@ -250,13 +250,13 @@ For players and PluginHub reviewers: what this plugin does and does not do. Ever
 - production orders, only in Gearforges named `[Make Ammo]`, through the game's own `TryEnqueueRecipe`
   (the same call as the production screen; `Game/AmmoJob.cs`).
 
-**Harmony patches** (`Patches/GamePatches.cs`), all read-only observers:
+**Harmony patches** (`Patches/GamePatches.cs`). All of them only observe, except the quick deposit protection:
 | Patch | Why |
 |---|---|
 | `Session.Update(bool)` postfix | Runs the plugin's work a few times per second on the game thread |
 | `InputGameComponent.Init` | Captures the game host once at start |
-| `InventoryComponent.TransferByIdx` | Notices items a player moves by hand (grace delay), changes nothing |
-| `TryDepositAllNonEssentialItemsImpl` | Keeps hand tools on the character during quick deposit (optional setting) |
+| `InventoryComponent.TransferByIdx` | Notices items a player moves by hand (grace delay). During a quick deposit it **skips** the move of hand tools and weapons (setting **Protect quick deposit**); otherwise it changes nothing |
+| `TryDepositAllNonEssentialItemsImpl` | Marks when a quick deposit runs, so the patch above knows when to protect hand tools. On a self-hosted world this runs on the host for **every** player's quick deposit, so all players keep their hand tools |
 
 **Reflection and generated code:** game members that are not public are read through cached reflection
 (`Game/Reflect.cs` and the `*Adapter.cs` / `StatusReader.cs` files): read-only, except the LCD text/style setters above.
@@ -322,7 +322,7 @@ Note: the world is paused while the settings screen is open, so the plugin waits
 | An item stays where it is | The log says `sort: no destination for <item> (<category>)`. Add a container with that tag. |
 | Ship doesn't unload | The connector must be **locked**, and the one on the **receiving** side must be named `[Unload]`. The log line `Dock '…' <-> '…': …` says which side receives, or why nothing happens. |
 | LCD text wraps or bars look empty | Set RobotoMono once and add the width to the tag (`[Cargo 54]`). |
-| Plugin stopped | The log says why. Fix it, then press **Reset error stop** or reload the world. |
+| Plugin stopped | The log says why. Fix it, then press **Reset error stop**, or load the world again (a newly loaded world starts without the stop). |
 
 ---
 
