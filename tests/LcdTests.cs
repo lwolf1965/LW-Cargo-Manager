@@ -680,3 +680,19 @@ public static class PartsOrderTests
     }
 }
 
+public static class WorldResetTests
+{
+    public static void ClearForgetsThePreviousWorld()
+    {
+        var alerts = new AlertLog();
+        alerts.Add("Dock A: 10 t unloaded", 100);
+        alerts.Clear();
+        Assert.Equal(0, alerts.Recent(101, 10).Count, "alerts cleared");
+
+        var deliveries = new DeliveryTracker<string, string>();
+        deliveries.Add("Base", "Dock A", "Iron", 1000, 100);
+        Assert.True(deliveries.Recent("Base", 101) != null, "delivery kept before clear");
+        deliveries.Clear();
+        Assert.True(deliveries.Recent("Base", 101) == null, "deliveries cleared");
+    }
+}

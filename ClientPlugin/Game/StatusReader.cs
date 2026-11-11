@@ -191,6 +191,8 @@ internal static class StatusReader
     // ---------------- damage ----------------
 
     private static readonly Dictionary<CubeGridComponent, (double Time, DamageSnapshot Snapshot)> DamageCache = new();
+
+    public static void ResetWorld() => DamageCache.Clear();
     private static MethodInfo visitMethod;
     private static Type cubeBlockType;
     private static bool visitProbed;

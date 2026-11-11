@@ -16,6 +16,13 @@ namespace ClientPlugin.Game;
 internal static class LcdJob
 {
     private static readonly Dictionary<(object, int), string> LastText = new();
+
+    /// <summary>Forget the LCDs of the previous world (called on world load).</summary>
+    public static void ResetWorld()
+    {
+        LastText.Clear();
+        Styled.Clear();
+    }
     private static readonly HashSet<LcdViewKind> ScreenErrors = new();
     /// <summary>Block name + settings each surface was last styled for; a change restyles it.</summary>
     private static readonly Dictionary<(object, int), string> Styled = new();

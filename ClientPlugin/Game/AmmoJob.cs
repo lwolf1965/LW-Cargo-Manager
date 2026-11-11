@@ -34,6 +34,12 @@ internal static class AmmoJob
 
     /// <summary>(Gearforge, ammo) → time of our last order, so one order isn't repeated before Crafting turns on.</summary>
     private static readonly Dictionary<(object, ItemDefinition), double> LastOrder = new();
+
+    public static void ResetWorld()
+    {
+        Status.Clear();
+        LastOrder.Clear();
+    }
     private static readonly HashSet<string> Warned = new();
 
     public static void Run(WorldScan scan, Config config, double now)

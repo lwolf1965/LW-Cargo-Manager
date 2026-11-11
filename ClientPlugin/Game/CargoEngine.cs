@@ -101,6 +101,22 @@ internal static class CargoEngine
         PluginLog.Info("Error stop reset.");
     }
 
+    /// <summary>
+    /// Static caches keyed by world objects (grids, LCDs, Gearforges). A world reload creates new objects,
+    /// so the old entries would only hold the previous world in memory.
+    /// </summary>
+    private static void ResetWorldCaches()
+    {
+        Grace.Clear();
+        Deliveries.Clear();
+        Alerts.Clear();
+        LcdJob.ResetWorld();
+        StatusReader.ResetWorld();
+        ConveyorAlerts.ResetWorld();
+        AmmoJob.ResetWorld();
+        PluginLog.Info("World loaded: plugin caches reset.");
+    }
+
     /// <summary>Called by the TransferByIdx patch for transfers not made by the plugin.</summary>
     public static void MarkPlayerMove(InventoryComponent destination, ItemDefinition item)
     {
@@ -146,7 +162,12 @@ internal static class CargoEngine
             if (client == null || world.Pause.IsPaused || client.Pause.IsPaused || world.IsSaving) return;
 
             var now = Stopwatch.GetTimestamp();
-            var state = States.GetValue(session, _ => new RunState());
+            if (!States.TryGetValue(session, out var state))
+            {
+                // First update of a newly loaded world: drop everything that points at the previous world's objects.
+                ResetWorldCaches();
+                state = States.GetValue(session, _ => new RunState());
+            }
 
             var unloadDue = now >= state.NextUnload;
             var sortDue = config.SortEnabled && now >= state.NextSort;

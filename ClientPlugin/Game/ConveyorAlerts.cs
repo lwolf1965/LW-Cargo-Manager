@@ -20,6 +20,8 @@ internal static class ConveyorAlerts
     private static readonly Dictionary<CubeGridComponent, (double Time, List<string> Lines)> Cache = new();
     private static readonly HashSet<string> Logged = new();
 
+    public static void ResetWorld() => Cache.Clear();
+
     public static IReadOnlyList<string> For(GridInfo grid, double now)
     {
         if (Cache.TryGetValue(grid.Grid, out var cached) && now - cached.Time < CacheSeconds) return cached.Lines;

@@ -352,6 +352,8 @@ public sealed class RateTracker<TKey>
 public sealed class AlertLog
 {
     private readonly LinkedList<(double Time, string Text)> entries = new();
+
+    public void Clear() => entries.Clear();
     public int Capacity { get; init; } = 8;
     public double MaxAgeSeconds { get; init; } = 600;
 
@@ -395,6 +397,8 @@ public sealed class Delivery<TItem>
 public sealed class DeliveryTracker<TGrid, TItem>
 {
     private readonly Dictionary<TGrid, Delivery<TItem>> last = new();
+
+    public void Clear() => last.Clear();
 
     public double MergeGapSeconds { get; init; } = 30;
     public double ShowForSeconds { get; set; } = 3600;
