@@ -36,6 +36,9 @@ internal sealed class RunState
     public long NextUnload, NextSort, NextTidy, NextLcd, NextReport;
     /// <summary>From the last full scan: any connector that can unload here. False = unload-only ticks are skipped.</summary>
     public bool HasUnloadDocks = true;
+    /// <summary>Unload-only ticks skip the scan only until this time; then a scan runs anyway (finds new [Unload] tags
+    /// even when sorting, LCDs and tidy are all off).</summary>
+    public long NextDockRescan;
     /// <summary>Scan timing for the 30 s report (ms).</summary>
     public double ScanMsTotal, ScanMsMax;
     public int ScanCount;
@@ -83,9 +86,11 @@ internal static class CargoEngine
 
     public static bool Failed => failure != null;
 
-    private static Session currentSession;
+    /// <summary>Weak, so the last world's Session is not kept alive while the player is in the main menu.</summary>
+    private static WeakReference<Session> currentSession;
 
-    public static void Disable(string reason) => Disable(reason, currentSession);
+    public static void Disable(string reason) =>
+        Disable(reason, currentSession != null && currentSession.TryGetTarget(out var session) ? session : null);
 
     private static void Disable(string reason, Session session)
     {
@@ -105,8 +110,11 @@ internal static class CargoEngine
     /// Static caches keyed by world objects (grids, LCDs, Gearforges). A world reload creates new objects,
     /// so the old entries would only hold the previous world in memory.
     /// </summary>
-    private static void ResetWorldCaches()
+    private static bool cachesHoldWorld;
+
+    private static void ResetWorldCaches(string why)
     {
+        cachesHoldWorld = false;
         Grace.Clear();
         Deliveries.Clear();
         Alerts.Clear();
@@ -114,7 +122,7 @@ internal static class CargoEngine
         StatusReader.ResetWorld();
         ConveyorAlerts.ResetWorld();
         AmmoJob.ResetWorld();
-        PluginLog.Info("World loaded: plugin caches reset.");
+        PluginLog.Info(why + ": plugin caches reset.");
     }
 
     /// <summary>Called by the TransferByIdx patch for transfers not made by the plugin.</summary>
@@ -144,7 +152,13 @@ internal static class CargoEngine
                 }
                 return;
             }
-            if (!ReferenceEquals(world.OwnedSession, session) || session.IsUnloading) return;
+            if (!ReferenceEquals(world.OwnedSession, session)) return;
+            if (session.IsUnloading)
+            {
+                // Leaving the world: let go of its objects now instead of at the next world load.
+                if (cachesHoldWorld) ResetWorldCaches("World unloading");
+                return;
+            }
 
             if (Failed)
             {
@@ -156,7 +170,8 @@ internal static class CargoEngine
                 failedSession = null;
                 PluginLog.Info("New world loaded: error stop cleared.");
             }
-            currentSession = session;
+            if (currentSession == null || !currentSession.TryGetTarget(out var known) || !ReferenceEquals(known, session))
+                currentSession = new WeakReference<Session>(session);
 
             var client = scene.GameClient?.TryGet<WorldSessionComponent>();
             if (client == null || world.Pause.IsPaused || client.Pause.IsPaused || world.IsSaving) return;
@@ -165,9 +180,10 @@ internal static class CargoEngine
             if (!States.TryGetValue(session, out var state))
             {
                 // First update of a newly loaded world: drop everything that points at the previous world's objects.
-                ResetWorldCaches();
+                ResetWorldCaches("World loaded");
                 state = States.GetValue(session, _ => new RunState());
             }
+            cachesHoldWorld = true;
 
             var unloadDue = now >= state.NextUnload;
             var sortDue = config.SortEnabled && now >= state.NextSort;
@@ -175,7 +191,8 @@ internal static class CargoEngine
             var lcdDue = config.LcdEnabled && now >= state.NextLcd;
             var discoveryDue = Discovery.Requested;
             // Unload-only tick with no unload dock in the last full scan: nothing to do, skip the scan.
-            if (unloadDue && !state.HasUnloadDocks && !sortDue && !tidyDue && !lcdDue && !discoveryDue)
+            if (unloadDue && !state.HasUnloadDocks && config.UnloadMode != UnloadMode.AllStationConnectors
+                && now < state.NextDockRescan && !sortDue && !tidyDue && !lcdDue && !discoveryDue)
             {
                 state.NextUnload = now + Ticks(config.UnloadIntervalSeconds);
                 return;
@@ -200,6 +217,7 @@ internal static class CargoEngine
             state.ScanMsMax = Math.Max(state.ScanMsMax, scanMs);
             state.ScanCount++;
             state.HasUnloadDocks = config.UnloadMode == UnloadMode.AllStationConnectors || scan.HasUnloadTags;
+            state.NextDockRescan = now + Ticks(10);
             var budget = new Budget(config);
             var options = config.ToRoutingOptions();
             Grace.DelaySeconds = config.GraceDelaySeconds;
