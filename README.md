@@ -12,7 +12,7 @@ Everything works through block names.
 > screens and ammo production are confirmed working in single player. Multiplayer is not tested yet (it isn't
 > released in Space Engineers 2). Try it on a copy of your world first.
 >
-> **New here? Read the [User Manual](Docs/UserManual.md)**: a step-by-step setup with every tag and screen.
+> **New here? Read the [User Manual](Docs/UserManual.md)** ([на русском](Docs/UserManual.ru.md)): a step-by-step setup with every tag and screen.
 
 ---
 

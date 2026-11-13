@@ -1,5 +1,7 @@
 # LW Cargo Manager — User Manual
 
+🇷🇺 [Русская версия](UserManual.ru.md)
+
 Version 0.1 (alpha, for Space Engineers 2 alpha). Everything in this manual works by **renaming blocks**.
 You never need a script, a programmable block or a timer.
 
