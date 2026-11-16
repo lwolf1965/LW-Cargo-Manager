@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: User Manual
+    url: https://github.com/lwolf1965/LW-Cargo-Manager/blob/main/Docs/UserManual.md
+    about: Setup, every tag and every screen. Check here first when something does not sort or unload.
+  - name: Руководство пользователя
+    url: https://github.com/lwolf1965/LW-Cargo-Manager/blob/main/Docs/UserManual.ru.md
+    about: Настройка, все теги и экраны на русском.
