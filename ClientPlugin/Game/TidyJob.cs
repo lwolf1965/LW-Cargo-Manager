@@ -57,6 +57,7 @@ internal static class TidyJob
                     var item = source.Inventory.Items[index].Definition;
                     budget.Checks++;
                     if (ItemTraitsMapper.CategoryOf(item) != category) continue;
+                    if (!Routing.CanConsolidateOut(source.Info, new ItemKey(category, ItemNames.Of(item)))) continue;
                     if (CargoEngine.Grace.IsProtected(source.Inventory, item)) continue;
 
                     var reachable = TransferService.ReachableSet(source.Inventory, item);

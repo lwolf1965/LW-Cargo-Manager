@@ -20,7 +20,11 @@ internal static class ConveyorAlerts
     private static readonly Dictionary<CubeGridComponent, (double Time, List<string> Lines)> Cache = new();
     private static readonly HashSet<string> Logged = new();
 
-    public static void ResetWorld() => Cache.Clear();
+    public static void ResetWorld()
+    {
+        Cache.Clear();
+        Logged.Clear(); // a new world logs its unlinked blocks again
+    }
 
     public static IReadOnlyList<string> For(GridInfo grid, double now)
     {

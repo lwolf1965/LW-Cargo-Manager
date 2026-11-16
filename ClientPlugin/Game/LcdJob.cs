@@ -22,6 +22,7 @@ internal static class LcdJob
     {
         LastText.Clear();
         Styled.Clear();
+        Rates.Clear(); // keyed by grid: would keep the previous world's grids alive
     }
     private static readonly HashSet<LcdViewKind> ScreenErrors = new();
     /// <summary>Block name + settings each surface was last styled for; a change restyles it.</summary>

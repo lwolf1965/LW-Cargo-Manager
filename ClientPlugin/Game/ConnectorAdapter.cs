@@ -146,7 +146,6 @@ internal static class GridMass
             if (!probed)
             {
                 probed = true;
-                const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
                 massMember = Reflect.Member(physics.GetType(), "Mass");
                 PluginLog.Info($"Grid mass probe: {(massMember == null ? "not found, using block count" : massMember.Name)}");
             }

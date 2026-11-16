@@ -32,6 +32,11 @@
     <Target Name="DeployPlugin" AfterTargets="Build" Condition="'$(LocalDeploymentDir)' != ''">
         <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(LocalDeploymentDir)" Retries="0" />
     </Target>
+
+    <!-- Release builds (dotnet build -c Release) keep a copy of the DLL in the Release folder next to the solution. -->
+    <Target Name="StoreRelease" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+        <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(MSBuildThisFileDirectory)..\Release" Retries="0" />
+    </Target>
     
     <ItemGroup>
       <PackageReference Include="Lib.Harmony" Version="2.4.2" />

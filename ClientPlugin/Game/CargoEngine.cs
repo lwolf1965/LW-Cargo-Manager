@@ -13,7 +13,7 @@ using Keen.VRage.DCS.Components;
 
 namespace ClientPlugin.Game;
 
-/// <summary>Work limits for one pass, shared by all jobs (Unload > Sort > Tidy).</summary>
+/// <summary>Work limits for one pass, shared by the jobs that move items (Unload > Sort > Tidy).</summary>
 internal sealed class Budget
 {
     private readonly Stopwatch watch = Stopwatch.StartNew();
@@ -33,7 +33,7 @@ internal sealed class Budget
 /// <summary>State kept per world session.</summary>
 internal sealed class RunState
 {
-    public long NextUnload, NextSort, NextTidy, NextLcd, NextReport;
+    public long NextUnload, NextSort, NextTidy, NextAmmo, NextLcd, NextReport;
     /// <summary>From the last full scan: any connector that can unload here. False = unload-only ticks are skipped.</summary>
     public bool HasUnloadDocks = true;
     /// <summary>Unload-only ticks skip the scan only until this time; then a scan runs anyway (finds new [Unload] tags
@@ -45,6 +45,10 @@ internal sealed class RunState
     /// <summary>Dock lines for [Cargo] screens, per receiving grid. Rebuilt by every unload pass.</summary>
     public readonly Dictionary<object, List<string>> DockStatus = new();
     public int SortCursor;
+    /// <summary>Which docked pair goes first this pass (they take turns, so one ship cannot use up every pass).</summary>
+    public int UnloadCursor;
+    /// <summary>Why a docked pair is idle, as last logged: logged once per dock and again when the reason changes.</summary>
+    public readonly Dictionary<(object, object), string> IdleReason = new();
     /// <summary>Dock direction decided at lock time, kept until unlock (mass changes while unloading).</summary>
     public readonly Dictionary<(Entity, Entity), DockReceiver> DockDirections = new();
     /// <summary>Both connector names when the direction was decided: a rename while docked decides again.</summary>
@@ -110,11 +114,8 @@ internal static class CargoEngine
     /// Static caches keyed by world objects (grids, LCDs, Gearforges). A world reload creates new objects,
     /// so the old entries would only hold the previous world in memory.
     /// </summary>
-    private static bool cachesHoldWorld;
-
     private static void ResetWorldCaches(string why)
     {
-        cachesHoldWorld = false;
         Grace.Clear();
         Deliveries.Clear();
         Alerts.Clear();
@@ -152,13 +153,9 @@ internal static class CargoEngine
                 }
                 return;
             }
-            if (!ReferenceEquals(world.OwnedSession, session)) return;
-            if (session.IsUnloading)
-            {
-                // Leaving the world: let go of its objects now instead of at the next world load.
-                if (cachesHoldWorld) ResetWorldCaches("World unloading");
-                return;
-            }
+            // The game stops updating a session once it is being disposed, so world caches are reset on the next
+            // world load (below), not here.
+            if (!ReferenceEquals(world.OwnedSession, session) || session.IsUnloading) return;
 
             if (Failed)
             {
@@ -183,21 +180,22 @@ internal static class CargoEngine
                 ResetWorldCaches("World loaded");
                 state = States.GetValue(session, _ => new RunState());
             }
-            cachesHoldWorld = true;
 
             var unloadDue = now >= state.NextUnload;
             var sortDue = config.SortEnabled && now >= state.NextSort;
             var tidyDue = (config.TidyConsolidate || config.TidyMergeExperimental) && now >= state.NextTidy;
             var lcdDue = config.LcdEnabled && now >= state.NextLcd;
+            // Weapon ammo has its own timer: it must not depend on the tidy options being on.
+            var ammoDue = now >= state.NextAmmo;
             var discoveryDue = Discovery.Requested;
             // Unload-only tick with no unload dock in the last full scan: nothing to do, skip the scan.
             if (unloadDue && !state.HasUnloadDocks && config.UnloadMode != UnloadMode.AllStationConnectors
-                && now < state.NextDockRescan && !sortDue && !tidyDue && !lcdDue && !discoveryDue)
+                && now < state.NextDockRescan && !sortDue && !tidyDue && !ammoDue && !lcdDue && !discoveryDue)
             {
                 state.NextUnload = now + Ticks(config.UnloadIntervalSeconds);
                 return;
             }
-            if (!unloadDue && !sortDue && !tidyDue && !lcdDue && !discoveryDue) return;
+            if (!unloadDue && !sortDue && !tidyDue && !ammoDue && !lcdDue && !discoveryDue) return;
 
             // Never write from an arbitrary thread.
             if (!session.Scene.IsCurrentThreadDCS())
@@ -229,6 +227,14 @@ internal static class CargoEngine
                 UnloadJob.Run(session, scan, state, config, options, budget);
             }
 
+            // Ammo before sorting and tidy ("staying alive" first). It moves nothing (it only queues recipes and
+            // fills the [Turrets] screen), so the transfer budget does not hold it back.
+            if (ammoDue)
+            {
+                state.NextAmmo = now + Ticks(config.TidyIntervalSeconds);
+                AmmoJob.Run(scan, config, NowSeconds);
+            }
+
             if (sortDue && !budget.Exhausted)
             {
                 state.NextSort = now + Ticks(config.SortIntervalSeconds);
@@ -239,7 +245,6 @@ internal static class CargoEngine
             {
                 state.NextTidy = now + Ticks(config.TidyIntervalSeconds);
                 TidyJob.Run(session, scan, state, config, options, budget);
-                AmmoJob.Run(scan, config, NowSeconds); // turret ammo stock; same slow rhythm as tidy
             }
 
             // LCDs last, so they show the result of this pass. Not limited by the transfer budget.

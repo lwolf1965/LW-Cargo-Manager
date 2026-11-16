@@ -55,6 +55,29 @@ public static class DockRules
         return DockReceiver.Tie;
     }
 
+    /// <summary>
+    /// Why nothing moved from a ship docked at an unload dock. <paramref name="eligible"/>: stacks the dock may take.
+    /// Short text for the dock line on [Cargo] screens; <see cref="IdleDetail"/> is the log sentence.
+    /// </summary>
+    public static string IdleStatus(int eligible, bool noPath, bool receiverFull)
+    {
+        if (eligible == 0) return "ship docked";
+        if (noPath) return "no conveyor path";
+        if (receiverFull) return "storage FULL";
+        return "cannot move";
+    }
+
+    public static string IdleDetail(int eligible, bool noPath, bool receiverFull, bool unloadAll)
+    {
+        if (eligible == 0)
+            return unloadAll
+                ? "nothing to unload (the ship is empty or holds only what [Unload All] keeps)"
+                : "nothing to unload ([Unload] takes ore and ice only; use [Unload All] for the rest)";
+        if (noPath) return $"{eligible} stack(s) wait, but no conveyor path leads from the ship to a container on the receiving grid";
+        if (receiverFull) return $"{eligible} stack(s) wait, but no container on the receiving grid has room for them";
+        return $"{eligible} stack(s) wait, but the game refused the move (no free slot in the destination?)";
+    }
+
     /// <summary>A station never feeds a ship automatically.</summary>
     private static bool Allowed(DockSide receiver, DockSide giver) => !(giver.GridIsStatic && !receiver.GridIsStatic);
 }

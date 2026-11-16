@@ -6,13 +6,15 @@ Name your containers and items sort themselves. Put a cargo screen on any LCD.
 A client plugin for [Pulsar](https://github.com/SpaceGT/Pulsar). No scripts and no programmable blocks.
 Everything works through block names.
 
-![Version](https://img.shields.io/badge/version-0.1.1.2-blue) ![Game](https://img.shields.io/badge/Space%20Engineers%202-client%20plugin-orange) ![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-0.1.1.3-blue) ![Game](https://img.shields.io/badge/Space%20Engineers%202-client%20plugin-orange) ![License](https://img.shields.io/badge/license-MIT-green)
 
 > **Early test version.** Unload docks, sorting, production output collection, LCD, power, gas, damage and ammo
 > screens and ammo production are confirmed working in single player. Multiplayer is not tested yet (it isn't
 > released in Space Engineers 2). Try it on a copy of your world first.
 >
 > **New here? Read the [User Manual](Docs/UserManual.md)** ([на русском](Docs/UserManual.ru.md)): a step-by-step setup with every tag and screen.
+>
+> What changed in each version: [Changelog](CHANGELOG.md).
 
 ---
 
@@ -283,7 +285,7 @@ LCD screens only affect that screen; sorting and unloading keep running.
 4. Enable **LW Cargo Manager** in the plugin list and restart.
 5. Pulsar compiles the plugin from source at every game start, so after pulling updates, just restart the game.
 
-The game log (`%AppData%\SpaceEngineers2\Temp\Logs`) shows `[LwCargoManager] Loaded LwCargoManager 0.1.1.2` when it works.
+The game log (`%AppData%\SpaceEngineers2\Temp\Logs`) shows `[LwCargoManager] Loaded LwCargoManager 0.1.1.3` when it works.
 
 ---
 

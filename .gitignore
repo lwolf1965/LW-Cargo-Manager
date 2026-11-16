@@ -61,3 +61,6 @@ nunit-*.xml
 
 # Visual Studio cache
 .vs/
+
+# Built plugin DLL kept on purpose (dotnet build -c Release)
+!/Release/

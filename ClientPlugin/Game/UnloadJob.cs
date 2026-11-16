@@ -50,27 +50,48 @@ internal static class UnloadJob
         // Forget "storage full" for pairs that undocked, so the message shows again next time.
         var current = new HashSet<(object, object)>(pairs.Select(p => ((object)p.Receiver.Grid, (object)p.Giver.Grid)));
         state.FullNotified.RemoveWhere(k => !current.Contains(k));
+        foreach (var gone in state.IdleReason.Keys.Where(k => !current.Contains(k)).ToList())
+            state.IdleReason.Remove(gone);
 
         state.DockStatus.Clear();
         var keeps = config.UnloadAllKeepSet;
-        foreach (var pair in pairs)
+        // Docked pairs take turns going first: they share one work budget per pass.
+        var first = pairs.Count > 0 ? state.UnloadCursor % pairs.Count : 0;
+        state.UnloadCursor = Routing.Next(first, pairs.Count);
+        for (var n = 0; n < pairs.Count; n++)
         {
-            if (budget.Exhausted) return;
+            var pair = pairs[(first + n) % pairs.Count];
+            if (!state.DockStatus.TryGetValue(pair.Receiver.Grid, out var dockLines))
+                state.DockStatus[pair.Receiver.Grid] = dockLines = new List<string>();
+            if (budget.Exhausted)
+            {
+                dockLines.Add($"{pair.DockName}: waiting its turn");
+                continue;
+            }
             var totals = new Dictionary<Category, double>();
-            var receiverFull = false;
+            var idle = new IdleInfo();
 
             foreach (var source in pair.Giver.Stores)
             {
                 if (budget.Exhausted) break;
                 if (!Routing.CanBeUnloadSource(source.Info)) continue;
-                UnloadStore(session, scan, source, pair, config, options, keeps, budget, totals, ref receiverFull);
+                UnloadStore(session, scan, source, pair, config, options, keeps, budget, totals, idle);
             }
+            var receiverFull = idle.Full && !idle.NoPath;
 
             var pairKey = ((object)pair.Receiver.Grid, (object)pair.Giver.Grid);
-            var status = totals.Count > 0 ? "unloading" : receiverFull ? "storage FULL" : "ship docked";
-            if (!state.DockStatus.TryGetValue(pair.Receiver.Grid, out var dockLines))
-                state.DockStatus[pair.Receiver.Grid] = dockLines = new List<string>();
+            var status = totals.Count > 0 ? "unloading" : DockRules.IdleStatus(idle.Eligible, idle.NoPath, idle.Full);
             dockLines.Add($"{pair.DockName}: {status}");
+
+            // Say once per dock why nothing moves (and again when the reason changes). Not on a cut-short pass.
+            if (totals.Count > 0) state.IdleReason.Remove(pairKey);
+            else if (!config.DryRun && !budget.Exhausted
+                     && (!state.IdleReason.TryGetValue(pairKey, out var known) || known != status))
+            {
+                state.IdleReason[pairKey] = status;
+                PluginLog.Info($"Dock '{pair.DockName}': {DockRules.IdleDetail(idle.Eligible, idle.NoPath, idle.Full, pair.DockTags.UnloadAll)}");
+            }
+
             if (totals.Count > 0)
             {
                 state.FullNotified.Remove(pairKey);
@@ -84,8 +105,19 @@ internal static class UnloadJob
         }
     }
 
+    /// <summary>What kept a docked pair from unloading in this pass.</summary>
+    private sealed class IdleInfo
+    {
+        /// <summary>Stacks the dock may take.</summary>
+        public int Eligible;
+        /// <summary>A stack reached no container of the receiving grid through conveyors.</summary>
+        public bool NoPath;
+        /// <summary>A stack reached containers, but none accepts it or has room.</summary>
+        public bool Full;
+    }
+
     private static void UnloadStore(Session session, WorldScan scan, Store source, Pair pair, Config config, RoutingOptions options,
-        HashSet<Category> keeps, Budget budget, Dictionary<Category, double> totals, ref bool receiverFull)
+        HashSet<Category> keeps, Budget budget, Dictionary<Category, double> totals, IdleInfo idle)
     {
         // Descending indices stay valid when a whole stack is removed.
         for (var index = source.Inventory.Items.Length - 1; index >= 0; index--)
@@ -98,12 +130,17 @@ internal static class UnloadJob
             var category = ItemTraitsMapper.CategoryOf(item);
             if (!Routing.ShouldUnload(category, pair.DockTags.UnloadAll, config.UnloadIce, keeps)) continue;
             if (!session.IsEntityInScene(source.Inventory.Entity)) return;
+            idle.Eligible++;
 
             var reachable = TransferService.ReachableSet(source.Inventory, item);
             var candidates = pair.Receiver.Stores.Where(s => reachable.Contains(s.Inventory)).ToList();
             var byId = candidates.ToDictionary(s => s.Info.Id);
             var destinations = Routing.Destinations(candidates.Select(s => s.Info), new ItemKey(category, ItemNames.Of(item)), options, forUnload: true);
-            if (destinations.Count == 0) { receiverFull = true; continue; }
+            if (destinations.Count == 0)
+            {
+                if (candidates.Count == 0) idle.NoPath = true; else idle.Full = true;
+                continue;
+            }
 
             foreach (var info in destinations)
             {

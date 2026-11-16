@@ -346,6 +346,8 @@ public sealed class RateTracker<TKey>
     }
 
     public IEnumerable<TKey> Keys => samples.Keys;
+
+    public void Clear() => samples.Clear();
 }
 
 /// <summary>Recent plugin messages for [Cargo Alerts] screens (also the HUD fallback).</summary>

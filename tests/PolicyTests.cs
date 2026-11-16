@@ -196,6 +196,34 @@ public static class DockRulesTests
         Assert.Equal(DockReceiver.None, DockRules.Receiver(new DockSide(null, true, 0), new DockSide(null, false, 0), UnloadMode.Tagged));
 }
 
+public static class DockIdleTests
+{
+    public static void StatusAndReason()
+    {
+        Assert.Equal("ship docked", DockRules.IdleStatus(0, noPath: true, receiverFull: true), "nothing to take wins");
+        Assert.Equal("no conveyor path", DockRules.IdleStatus(3, noPath: true, receiverFull: true));
+        Assert.Equal("storage FULL", DockRules.IdleStatus(3, noPath: false, receiverFull: true));
+        Assert.Equal("cannot move", DockRules.IdleStatus(3, noPath: false, receiverFull: false));
+        Assert.True(DockRules.IdleDetail(0, false, false, unloadAll: true).Contains("[Unload All] keeps"));
+        Assert.True(DockRules.IdleDetail(0, false, false, unloadAll: false).Contains("ore and ice only"));
+        Assert.True(DockRules.IdleDetail(2, true, false, true).Contains("no conveyor path"));
+        Assert.True(DockRules.IdleDetail(2, false, true, true).Contains("has room"));
+    }
+
+    public static void PairsTakeTurns()
+    {
+        // Two docked ships: the starting pair moves on every pass, so a busy first ship cannot starve the second.
+        var cursor = 0;
+        var order = new System.Collections.Generic.List<int>();
+        for (var pass = 0; pass < 4; pass++)
+        {
+            order.Add(cursor % 2);
+            cursor = Routing.Next(cursor, 2);
+        }
+        Assert.Equal("0,1,0,1", string.Join(",", order));
+    }
+}
+
 public static class RoutingTests
 {
     private static readonly RoutingOptions Defaults = new();
@@ -511,6 +539,16 @@ public static class ItemTagTests
         var only = Routing.Destinations(new[] { ore, si }, Silicon, Defaults, false, itemTagsOnly: true);
         Assert.Equal(1, only.Count);
         Assert.Equal(1, Routing.Destinations(new[] { ore, si }, Nickel, Defaults, false).Count, "nickel never into [Si]");
+    }
+
+    public static void ConsolidateKeepsItemTagged()
+    {
+        var both = Store("[Ore P2] [Si]", 1, used: 100);
+        var ore = Store("[Ore P2]", 2, used: 100);
+        Assert.False(Routing.CanConsolidateOut(both, Silicon), "[Si] on the same container keeps Silicon (no ping-pong with the sorter)");
+        Assert.True(Routing.CanConsolidateOut(both, Nickel), "nickel may move to a better [Ore] container");
+        Assert.True(Routing.CanConsolidateOut(ore, Silicon), "plain [Ore]: Silicon may move");
+        Assert.False(Routing.CanConsolidateOut(Store("[Ore] [NoTidy]", 3), Nickel), "[NoTidy] is never a tidy source");
     }
 
     public static void SummaryRow()

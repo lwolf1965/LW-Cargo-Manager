@@ -79,6 +79,14 @@ public static class Routing
         return true;
     }
 
+    /// <summary>
+    /// May tidy (consolidate) move this item out of this container into a better-ranked one of the same category?
+    /// Not when the container keeps the item by its own item tag: "[Ore P2] [Si]" keeps its Silicon, otherwise
+    /// tidy would push it to [Ore P1] and the sorter would bring it straight back.
+    /// </summary>
+    public static bool CanConsolidateOut(StoreInfo source, ItemKey item) =>
+        !source.Tags.Lock && !source.Tags.NoTidy && !source.Tags.AcceptsItem(item);
+
     /// <summary>Is the sorter active on a grid? Only if it has at least one destination.</summary>
     public static bool GridOptedIn(IEnumerable<StoreInfo> gridStores, RoutingOptions options) =>
         gridStores.Any(s => IsTaggedDestination(s, options));

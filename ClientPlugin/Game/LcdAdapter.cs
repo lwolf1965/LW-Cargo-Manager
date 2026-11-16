@@ -233,7 +233,6 @@ internal static class ItemNames
 
     private static string Read(ItemDefinition definition)
     {
-        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
         if (!probed)
         {
             probed = true;
