@@ -4,7 +4,7 @@ All released versions of LW Cargo Manager, newest first.
 
 Version numbers are STAGE.FEATURE.FIX.BUILD. The stage follows the game: 0.1 = game alpha.
 
-## 0.1.1.3 (not released yet)
+## 0.1.1.3
 
 ### Fixed
 
